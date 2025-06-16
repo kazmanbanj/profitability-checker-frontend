@@ -1,4 +1,6 @@
-# profitability-checker
+# Specifi Profit Optimiser Frontend (Vue 3 + TypeScript)
+
+Vue 3 SPA with TypeScript for interacting with the Laravel Profitability API.
 
 This template should help get you started developing with Vue 3 in Vite.
 
