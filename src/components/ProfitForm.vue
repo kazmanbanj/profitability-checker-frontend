@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, computed } from 'vue'
 import api from '@/api'
 
 interface AdditionalInfo {
@@ -23,13 +23,10 @@ interface Form {
 }
 
 interface Result {
-  total_revenue: number
-  total_cost: number
-  net_profit: number
-  margin: number
-  health_status: string
-  labor_flag: boolean
-  ai_suggestions: string
+  success: boolean
+  data: object
+  message: string
+  error: string[]
 }
 
 const form = reactive<Form>({
@@ -52,6 +49,51 @@ const form = reactive<Form>({
 })
 
 const result = ref<Result | null>(null)
+const loading = ref(false)
+
+const analysis = computed(() => {
+  return (result.value?.data as Record<string, any>)?.ai_profitability_suggestions ?? {}
+})
+
+const currency = computed(() => {
+  return analysis.value?.currency_symbol ?? ''
+})
+
+const healthStatus = computed(() => {
+  const indicator = analysis.value?.ai_suggestions?.profitability_health_indicator
+  if (!indicator) return null
+  if (indicator === 'red') {
+    return {
+      label: 'Poor',
+      class: 'text-danger font-bold',
+      style: 'color: #dc2626;',
+    }
+  }
+  if (indicator === 'yellow') {
+    return {
+      label: 'Needs Review',
+      class: 'text-warning font-bold',
+      style: 'color: #f59e42;',
+    }
+  }
+  if (indicator === 'green') {
+    return {
+      label: 'Good',
+      class: 'text-success font-bold',
+      style: 'color: #16a34a;',
+    }
+  }
+  return {
+    label: indicator,
+    class: '',
+    style: '',
+  }
+})
+
+function formatNumber(value: number): string {
+  if (typeof value !== 'number' || isNaN(value)) return '0.00'
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 function addItem() {
   form.line_items.push({
@@ -80,119 +122,447 @@ function addAdditionalField(item: Item) {
 function removeAdditionalField(item: Item, key: string) {
   delete item.additional_info[key]
 }
-
 async function submitForm() {
-  const { data } = await api.post('v1/quotes/analyze', form)
-  result.value = data
+  loading.value = true
+  try {
+    const { data } = await api.post('v1/quotes/analyze', form)
+    result.value = data
+  } finally {
+    loading.value = false
+  }
+}
+
+async function exportResult() {
+  if (!result.value) return
+  const quoteId = (result.value.data as any)?.id
+  if (!quoteId) {
+    alert('Quote ID not found in result.')
+    return
+  }
+  loading.value = true
+  try {
+    const response = await api.get(`v1/quotes/${quoteId}/export-analysis`, {
+      responseType: 'blob',
+      params: { format: 'pdf' },
+    })
+    const blob = new Blob([response.data], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `profitability_result_${quoteId}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
 <template>
-  <form @submit.prevent="submitForm" class="space-y-6 max-w-4xl mx-auto p-6 bg-white shadow-md rounded-lg">
-    <div v-for="(item, index) in form.line_items" :key="index" class="space-y-4 border p-4 rounded-md bg-gray-50">
+  <form
+    @submit.prevent="submitForm"
+    class="space-y-6 max-w-4xl mx-auto p-6 bg-white shadow-md rounded-lg"
+  >
+    <div
+      v-for="(item, index) in form.line_items"
+      :key="index"
+      class="space-y-4 border p-4 rounded-md bg-gray-50"
+    >
       <div class="grid grid-cols-5 gap-4 items-end">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
-          <input v-model="item.name" type="text" class="input" required />
+          <input
+            v-model="item.name"
+            type="text"
+            class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            required
+          />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Cost Price</label>
-          <input v-model.number="item.cost_price" type="number" class="input" required />
+          <input
+            v-model.number="item.cost_price"
+            type="number"
+            class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            required
+          />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Sell Price</label>
-          <input v-model.number="item.sell_price" type="number" class="input" required />
+          <input
+            v-model.number="item.sell_price"
+            type="number"
+            class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            required
+          />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-          <input v-model.number="item.quantity" type="number" class="input" required />
+          <input
+            v-model.number="item.quantity"
+            type="number"
+            class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            required
+          />
         </div>
         <div class="text-right">
-          <button type="button" @click="removeItem(index)" class="text-red-500 hover:text-red-700">🗑️ Remove</button>
+          <button type="button" @click="removeItem(index)" class="text-red-500 hover:text-red-700">
+            🗑️ Remove Item
+          </button>
         </div>
       </div>
 
-      <div v-for="(value, key) in item.additional_info" :key="key" class="grid grid-cols-3 gap-4 items-end">
+      <div
+        v-for="(value, key) in item.additional_info"
+        :key="key"
+        class="grid grid-cols-3 gap-4 items-end"
+      >
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">{{ key }}</label>
-          <input v-model="item.additional_info[key]" type="text" class="input" />
+          <input
+            v-model="item.additional_info[key]"
+            type="text"
+            class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+          />
         </div>
         <div class="text-left">
-          <button type="button" class="text-red-500 hover:text-red-700" @click="removeAdditionalField(item, String(key))">Remove</button>
+          <button
+            type="button"
+            class="text-red-500 hover:text-red-700"
+            @click="removeAdditionalField(item, String(key))"
+          >
+            Remove
+          </button>
         </div>
       </div>
 
       <div>
-        <button type="button" @click="addAdditionalField(item)" class="text-blue-600 hover:text-blue-800">➕ Add Additional Info</button>
+        <button
+          type="button"
+          @click="addAdditionalField(item)"
+          class="text-blue-600 hover:text-blue-800"
+        >
+          ➕ Add Additional Info
+        </button>
       </div>
     </div>
 
     <div class="text-right">
-      <button type="button" @click="addItem" class="text-green-600 hover:text-green-800">➕ Add Item</button>
+      <button type="button" @click="addItem" class="text-green-600 hover:text-green-800">
+        ➕ Add Item
+      </button>
     </div>
 
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Labor Hours</label>
-        <input v-model.number="form.labor_hours" type="number" class="input" />
+        <input
+          v-model.number="form.labor_hours"
+          type="number"
+          class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+        />
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Labor Cost per Hour</label>
-        <input v-model.number="form.labor_cost_per_hour" type="number" class="input" />
+        <input
+          v-model.number="form.labor_cost_per_hour"
+          type="number"
+          class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+        />
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Fixed Overheads</label>
-        <input v-model.number="form.fixed_overheads" type="number" class="input" />
+        <input
+          v-model.number="form.fixed_overheads"
+          type="number"
+          class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+        />
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Target Profit Margin (%)</label>
-        <input v-model.number="form.target_profit_margin" type="number" step="0.01" class="input" />
+        <input
+          v-model.number="form.target_profit_margin"
+          type="number"
+          step="0.01"
+          class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+        />
       </div>
     </div>
-    <br>
-    <div class="text-center">
-      <button type="submit" class="btn mt-4">Check Profitability</button>
+    <br />
+    <div class="flex justify-center">
+      <button
+        type="submit"
+        :disabled="loading"
+        class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 mt-4 flex items-center justify-center"
+        :class="{ 'opacity-50 cursor-not-allowed': loading }"
+      >
+        <span v-if="loading" class="loader mr-2"></span>
+        {{ loading ? 'Checking...' : 'Check Profitability' }}
+      </button>
     </div>
 
-    <div v-if="result" class="mt-6 border p-6 rounded shadow bg-gray-50">
-      <h2 class="font-bold text-lg mb-2">Result</h2>
-      <p><strong>Total Revenue:</strong> {{ result.total_revenue }}</p>
-      <p><strong>Total Cost:</strong> {{ result.total_cost }}</p>
-      <p><strong>Net Profit:</strong> {{ result.net_profit }}</p>
-      <p><strong>Margin:</strong> {{ result.margin }} ({{ result.health_status }})</p>
-      <p v-if="result.labor_flag" class="text-red-600 font-medium mt-2">⚠️ Labor hours exceed sustainable threshold</p>
-      <p class="font-semibold mt-4">AI Suggestions:</p>
-      <pre class="bg-white border rounded p-2 mt-2 text-sm">{{ result.ai_suggestions }}</pre>
+    <div
+      v-if="result"
+      class="container mx-auto my-10 p-8 bg-white rounded-lg shadow"
+      style="max-width: 900px"
+    >
+      <div class="mb-4">
+        <h2 class="text-2xl font-bold text-gray-800 inline-block relative">
+          Quote Summary
+          <span class="block h-0.5 bg-gray-300 mt-1 w-full"></span>
+        </h2>
+      </div>
+
+      <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Quote Items Overview</h4>
+      <table class="w-full border-collapse border border-gray-400 mb-6 text-sm bordered-table">
+        <thead>
+          <tr class="bg-gray-100">
+            <th>Item</th>
+            <th>Cost</th>
+            <th>Sell</th>
+            <th>Quantity</th>
+            <th>Total Cost</th>
+            <th>Total Revenue</th>
+            <th>Margin %</th>
+            <th>Status</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="(li, idx) in (result.data as any)?.ai_profitability_suggestions?.line_items"
+            :key="idx"
+          >
+            <td>{{ li.name }}</td>
+            <td>{{ currency }}{{ formatNumber(li.cost_price) }}</td>
+            <td>{{ currency }}{{ formatNumber(li.sell_price) }}</td>
+            <td>{{ li.quantity }}</td>
+            <td>{{ currency }}{{ formatNumber(li.cost_price * li.quantity) }}</td>
+            <td>{{ currency }}{{ formatNumber(li.sell_price * li.quantity) }}</td>
+            <td
+              :class="li.margin_percent < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'"
+            >
+              {{ li.margin_percent }}%
+            </td>
+            <td
+              :class="
+                String(li.status ?? '').toLowerCase() === 'low margin'
+                  ? 'text-red-600 font-bold'
+                  : 'text-green-600 font-bold'
+              "
+            >
+              {{ li.status ?? 'N/A' }}
+            </td>
+            <td>
+              {{ li.suggestion ?? 'N/A' }}
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4"></td>
+            <td>
+              <strong> {{ currency }}{{ formatNumber(analysis.total_cost) }} </strong>
+            </td>
+            <td>
+              <strong> {{ currency }}{{ formatNumber(analysis.total_revenue) }} </strong>
+            </td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Financial Summary</h4>
+      <table class="w-full border-collapse mb-6 bordered-table">
+        <thead>
+          <tr class="bg-gray-100">
+            <th>Metric</th>
+            <th>Value</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Total Revenue</th>
+            <td></td>
+            <td>
+              <strong>{{ currency }}{{ formatNumber(analysis.total_revenue) }}</strong>
+            </td>
+          </tr>
+          <tr>
+            <th>Labor Hours</th>
+            <td>{{ analysis.labor_hours }} hrs</td>
+            <td></td>
+          </tr>
+          <tr>
+            <th>Labor Cost Per Hour</th>
+            <td>{{ currency }}{{ formatNumber(analysis.labor_cost_per_hour) }}</td>
+            <td></td>
+          </tr>
+          <tr>
+            <th>Total Labor Cost</th>
+            <td>
+              <strong>{{ currency }}{{ formatNumber(analysis.labor_cost) }}</strong>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <th>Total Items Cost</th>
+            <td>
+              <strong>{{ currency }}{{ formatNumber(analysis.total_cost) }}</strong>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <th>Fixed Overheads</th>
+            <td>
+              <strong>{{ currency }}{{ formatNumber(analysis.fixed_overheads) }}</strong>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <th>Cost of Goods Sold (COGS)</th>
+            <td></td>
+            <td>
+              <strong>{{ currency }}{{ formatNumber(analysis.cost_of_goods_sold) }}</strong>
+            </td>
+          </tr>
+          <tr>
+            <th>Gross Profit</th>
+            <td></td>
+            <td
+              :class="
+                analysis.gross_profit < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
+              "
+            >
+              <strong>{{ currency }}{{ formatNumber(analysis.gross_profit) }}</strong>
+            </td>
+          </tr>
+          <tr>
+            <th>Profit Margin</th>
+            <td></td>
+            <td
+              :class="
+                analysis.profit_margin < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
+              "
+            >
+              <strong>{{ formatNumber(analysis.profit_margin) }}%</strong>
+            </td>
+          </tr>
+          <tr>
+            <th>Target Margin</th>
+            <td></td>
+            <td>{{ formatNumber(analysis.target_profit_margin) }}%</td>
+          </tr>
+          <tr>
+            <th>Target Met</th>
+            <td></td>
+            <td>
+              <span v-if="analysis.meets_target">Yes</span>
+              <span v-else>No</span>
+            </td>
+          </tr>
+          <tr>
+            <th>Profitability Health Status</th>
+            <td></td>
+            <td>
+              <span v-if="healthStatus" :class="healthStatus.class" :style="healthStatus.style">{{
+                healthStatus.label
+              }}</span>
+              <span v-else>N/A</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div v-if="analysis.labor_suggestions">
+        <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Labor Efficiency Analysis</h4>
+        <table class="w-full border-collapse mb-6 bordered-table">
+          <thead>
+            <tr class="bg-gray-100">
+              <th>Metric</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Estimated Sustainable Hours</th>
+              <td>{{ analysis.labor_suggestions.estimated_sustainable_hours }}</td>
+            </tr>
+            <tr>
+              <th>Labour Hours Exceeded</th>
+              <td>
+                <span v-if="analysis.labor_suggestions.labor_hours_exceeded">Yes</span>
+                <span v-else>No</span>
+              </td>
+            </tr>
+            <tr>
+              <th>Comment</th>
+              <td>{{ analysis.labor_suggestions.comment }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="analysis.ai_suggestions">
+        <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Suggested Improvements</h4>
+        <table class="w-full border-collapse mb-6 bordered-table">
+          <thead>
+            <tr class="bg-gray-100">
+              <th>Metric</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Target Margin Adjustments</th>
+              <td>{{ analysis.ai_suggestions.target_margin_adjustments }}</td>
+            </tr>
+            <tr>
+              <th>Labor Allocation Improvements</th>
+              <td>{{ analysis.ai_suggestions.labor_allocation_improvements }}</td>
+            </tr>
+            <tr>
+              <th>Product Swaps</th>
+              <td>{{ analysis.ai_suggestions.product_swaps }}</td>
+            </tr>
+            <tr>
+              <th>Profitability Summary</th>
+              <td>{{ analysis.ai_suggestions.profitability_summary }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="flex justify-end mt-4" v-if="result">
+        <button
+        type="button"
+        :disabled="loading"
+        class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center"
+        @click="exportResult"
+        :class="{ 'opacity-50 cursor-not-allowed': loading }"
+        >
+        <span v-if="loading" class="loader mr-2"></span>
+        Export Result
+        </button>
+      </div>
     </div>
   </form>
 </template>
 
 <style scoped>
-.input {
-    border: 1px solid #d1d5db;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    width: 100%;
-    outline: none;
-    transition: box-shadow 0.2s, border-color 0.2s;
+.bordered-table,
+.bordered-table th,
+.bordered-table td {
+  border: 1px solid #d1d5db;
 }
-.input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px #3b82f6;
+.bordered-table th,
+.bordered-table td {
+  padding: 0.5rem;
 }
-
-.btn {
-    background-color: #2563eb;
-    color: #fff;
-    padding: 0.5rem 1.5rem;
-    border-radius: 0.25rem;
-    box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
-    transition: background 0.2s;
-    border: none;
-    cursor: pointer;
-
-}
-.btn:hover {
-    background-color: #1d4ed8;
+.bordered-table {
+  background: #fff;
+  border-radius: 0.375rem;
 }
 </style>
