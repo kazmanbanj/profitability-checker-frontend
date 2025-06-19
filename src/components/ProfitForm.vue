@@ -139,9 +139,54 @@ async function submitForm() {
   }
 }
 
+async function resubmitForm() {
+  loading.value = true
+  const quoteId = (result.value?.data as { id?: string | number })?.id
+  if (!quoteId) {
+    alert('Quote ID not found in result.')
+    loading.value = false
+    return
+  }
+
+  try {
+    const aiSuggestions = (result.value?.data as any)?.ai_profitability_suggestions
+    const resubmit_form = {
+      quote_id: quoteId,
+      line_items: aiSuggestions?.line_items?.map(
+        (li: { id: string | number; suggestion: string }) => ({
+          id: li.id,
+          suggestion: li.suggestion,
+        }),
+      ),
+      labor_suggestions: aiSuggestions?.labor_suggestions
+        ? {
+            comment: aiSuggestions.labor_suggestions.comment,
+          }
+        : undefined,
+      ai_suggestions: aiSuggestions?.ai_suggestions
+        ? {
+            target_margin_adjustments: aiSuggestions.ai_suggestions.target_margin_adjustments,
+            labor_allocation_improvements:
+              aiSuggestions.ai_suggestions.labor_allocation_improvements,
+            product_swaps: aiSuggestions.ai_suggestions.product_swaps,
+            profitability_summary: aiSuggestions.ai_suggestions.profitability_summary,
+          }
+        : undefined,
+    }
+    const { data } = await api.post(`v1/quotes/${quoteId}/re-analyze`, resubmit_form)
+    result.value = data
+    await nextTick()
+    if (quoteSummary.value) {
+      quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
 async function exportResult() {
   if (!result.value) return
-  const quoteId = (result.value.data as any)?.id
+  const quoteId = (result.value?.data as { id?: string | number })?.id
   if (!quoteId) {
     alert('Quote ID not found in result.')
     return
@@ -315,245 +360,298 @@ async function exportResult() {
       class="container mx-auto my-10 p-8 bg-white rounded-lg shadow"
       style="max-width: 900px"
     >
-      <div class="mb-4" ref="quoteSummary">
-        <h2 class="text-2xl font-bold text-gray-800 inline-block relative">
-          Quote Summary
-          <span class="block h-0.5 bg-gray-300 mt-1 w-full"></span>
-        </h2>
-      </div>
+      <form @submit.prevent="resubmitForm">
+        <div class="mb-4" ref="quoteSummary">
+          <h2 class="text-2xl font-bold text-gray-800 inline-block relative">
+            Quote Summary
+            <span class="block h-0.5 bg-gray-300 mt-1 w-full"></span>
+          </h2>
+        </div>
 
-      <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Quote Items Overview</h4>
-      <table class="w-full border-collapse border border-gray-400 mb-6 text-sm bordered-table">
-        <thead>
-          <tr class="bg-gray-100">
-            <th>Item</th>
-            <th>Cost</th>
-            <th>Sell</th>
-            <th>Quantity</th>
-            <th>Total Cost</th>
-            <th>Total Revenue</th>
-            <th>Margin %</th>
-            <th>Status</th>
-            <th>Recommendation</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(li, idx) in (result.data as any)?.ai_profitability_suggestions?.line_items"
-            :key="idx"
-          >
-            <td>{{ li.name }}</td>
-            <td>{{ currency }}{{ formatNumber(li.cost_price) }}</td>
-            <td>{{ currency }}{{ formatNumber(li.sell_price) }}</td>
-            <td>{{ li.quantity }}</td>
-            <td>{{ currency }}{{ formatNumber(li.cost_price * li.quantity) }}</td>
-            <td>{{ currency }}{{ formatNumber(li.sell_price * li.quantity) }}</td>
-            <td
-              :class="li.margin_percent < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'"
+        <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Quote Items Overview</h4>
+        <table class="w-full border-collapse border border-gray-400 mb-6 text-sm bordered-table">
+          <thead>
+            <tr class="bg-gray-100">
+              <th>Item</th>
+              <th>Cost</th>
+              <th>Sell</th>
+              <th>Quantity</th>
+              <th>Total Cost</th>
+              <th>Total Revenue</th>
+              <th>Margin %</th>
+              <th>Status</th>
+              <th>Recommendation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(li, idx) in (result.data as any)?.ai_profitability_suggestions?.line_items"
+              :key="idx"
             >
-              {{ li.margin_percent }}%
-            </td>
-            <td
-              :class="
-                String(li.status ?? '').toLowerCase() === 'low margin'
-                  ? 'text-red-600 font-bold'
-                  : 'text-green-600 font-bold'
-              "
-            >
-              {{ li.status ?? 'N/A' }}
-            </td>
-            <td>
-              {{ li.suggestion ?? 'N/A' }}
-            </td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4"></td>
-            <td>
-              <strong> {{ currency }}{{ formatNumber(analysis.total_cost) }} </strong>
-            </td>
-            <td>
-              <strong> {{ currency }}{{ formatNumber(analysis.total_revenue) }} </strong>
-            </td>
-            <td colspan="3"></td>
-          </tr>
-        </tfoot>
-      </table>
+              <td>{{ li.name }}</td>
+              <td>{{ currency }}{{ formatNumber(li.cost_price) }}</td>
+              <td>{{ currency }}{{ formatNumber(li.sell_price) }}</td>
+              <td>{{ li.quantity }}</td>
+              <td>{{ currency }}{{ formatNumber(li.cost_price * li.quantity) }}</td>
+              <td>{{ currency }}{{ formatNumber(li.sell_price * li.quantity) }}</td>
+              <td
+                :class="
+                  li.margin_percent < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
+                "
+              >
+                {{ li.margin_percent }}%
+              </td>
+              <td
+                :class="
+                  String(li.status ?? '').toLowerCase() === 'low margin'
+                    ? 'text-red-600 font-bold'
+                    : 'text-green-600 font-bold'
+                "
+              >
+                {{ li.status ?? 'N/A' }}
+              </td>
+              <td>
+                <textarea
+                  v-model="li.suggestion"
+                  class="border border-gray-300 p-1 rounded w-full"
+                  :placeholder="'Enter suggestion...'"
+                  rows="5"
+                ></textarea>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4"></td>
+              <td>
+                <strong> {{ currency }}{{ formatNumber(analysis.total_cost) }} </strong>
+              </td>
+              <td>
+                <strong> {{ currency }}{{ formatNumber(analysis.total_revenue) }} </strong>
+              </td>
+              <td colspan="3"></td>
+            </tr>
+          </tfoot>
+        </table>
 
-      <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Financial Summary</h4>
-      <table class="w-full border-collapse mb-6 bordered-table">
-        <thead>
-          <tr class="bg-gray-100">
-            <th>Metric</th>
-            <th>Value</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th>Total Revenue</th>
-            <td></td>
-            <td>
-              <strong>{{ currency }}{{ formatNumber(analysis.total_revenue) }}</strong>
-            </td>
-          </tr>
-          <tr>
-            <th>Labor Hours</th>
-            <td>{{ analysis.labor_hours }} hrs</td>
-            <td></td>
-          </tr>
-          <tr>
-            <th>Labor Cost Per Hour</th>
-            <td>{{ currency }}{{ formatNumber(analysis.labor_cost_per_hour) }}</td>
-            <td></td>
-          </tr>
-          <tr>
-            <th>Total Labor Cost</th>
-            <td>
-              <strong>{{ currency }}{{ formatNumber(analysis.labor_cost) }}</strong>
-            </td>
-            <td></td>
-          </tr>
-          <tr>
-            <th>Total Items Cost</th>
-            <td>
-              <strong>{{ currency }}{{ formatNumber(analysis.total_cost) }}</strong>
-            </td>
-            <td></td>
-          </tr>
-          <tr>
-            <th>Fixed Overheads</th>
-            <td>
-              <strong>{{ currency }}{{ formatNumber(analysis.fixed_overheads) }}</strong>
-            </td>
-            <td></td>
-          </tr>
-          <tr>
-            <th>Cost of Goods Sold (COGS)</th>
-            <td></td>
-            <td>
-              <strong>{{ currency }}{{ formatNumber(analysis.cost_of_goods_sold) }}</strong>
-            </td>
-          </tr>
-          <tr>
-            <th>Gross Profit</th>
-            <td></td>
-            <td
-              :class="
-                analysis.gross_profit < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
-              "
-            >
-              <strong>{{ currency }}{{ formatNumber(analysis.gross_profit) }}</strong>
-            </td>
-          </tr>
-          <tr>
-            <th>Profit Margin</th>
-            <td></td>
-            <td
-              :class="
-                analysis.profit_margin < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
-              "
-            >
-              <strong>{{ formatNumber(analysis.profit_margin) }}%</strong>
-            </td>
-          </tr>
-          <tr>
-            <th>Target Margin</th>
-            <td></td>
-            <td>{{ formatNumber(analysis.target_profit_margin) }}%</td>
-          </tr>
-          <tr>
-            <th>Target Met</th>
-            <td></td>
-            <td>
-              <span v-if="analysis.meets_target">Yes</span>
-              <span v-else>No</span>
-            </td>
-          </tr>
-          <tr>
-            <th>Profitability Health Status</th>
-            <td></td>
-            <td>
-              <span v-if="healthStatus" :class="healthStatus.class" :style="healthStatus.style">{{
-                healthStatus.label
-              }}</span>
-              <span v-else>N/A</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div v-if="analysis.labor_suggestions">
-        <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Labor Efficiency Analysis</h4>
+        <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Financial Summary</h4>
         <table class="w-full border-collapse mb-6 bordered-table">
           <thead>
             <tr class="bg-gray-100">
               <th>Metric</th>
               <th>Value</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <th>Estimated Sustainable Hours</th>
-              <td>{{ analysis.labor_suggestions.estimated_sustainable_hours }}</td>
+              <th>Total Revenue</th>
+              <td></td>
+              <td>
+                <strong>{{ currency }}{{ formatNumber(analysis.total_revenue) }}</strong>
+              </td>
             </tr>
             <tr>
-              <th>Labour Hours Exceeded</th>
+              <th>Labor Hours</th>
+              <td>{{ analysis.labor_hours }} hrs</td>
+              <td></td>
+            </tr>
+            <tr>
+              <th>Labor Cost Per Hour</th>
+              <td>{{ currency }}{{ formatNumber(analysis.labor_cost_per_hour) }}</td>
+              <td></td>
+            </tr>
+            <tr>
+              <th>Total Labor Cost</th>
               <td>
-                <span v-if="analysis.labor_suggestions.labor_hours_exceeded">Yes</span>
+                <strong>{{ currency }}{{ formatNumber(analysis.labor_cost) }}</strong>
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <th>Total Items Cost</th>
+              <td>
+                <strong>{{ currency }}{{ formatNumber(analysis.total_cost) }}</strong>
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <th>Fixed Overheads</th>
+              <td>
+                <strong>{{ currency }}{{ formatNumber(analysis.fixed_overheads) }}</strong>
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <th>Cost of Goods Sold (COGS)</th>
+              <td></td>
+              <td>
+                <strong>{{ currency }}{{ formatNumber(analysis.cost_of_goods_sold) }}</strong>
+              </td>
+            </tr>
+            <tr>
+              <th>Gross Profit</th>
+              <td></td>
+              <td
+                :class="
+                  analysis.gross_profit < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
+                "
+              >
+                <strong>{{ currency }}{{ formatNumber(analysis.gross_profit) }}</strong>
+              </td>
+            </tr>
+            <tr>
+              <th>Profit Margin</th>
+              <td></td>
+              <td
+                :class="
+                  analysis.profit_margin < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
+                "
+              >
+                <strong>{{ formatNumber(analysis.profit_margin) }}%</strong>
+              </td>
+            </tr>
+            <tr>
+              <th>Target Margin</th>
+              <td></td>
+              <td>{{ formatNumber(analysis.target_profit_margin) }}%</td>
+            </tr>
+            <tr>
+              <th>Target Met</th>
+              <td></td>
+              <td>
+                <span v-if="analysis.meets_target">Yes</span>
                 <span v-else>No</span>
               </td>
             </tr>
             <tr>
-              <th>Comment</th>
-              <td>{{ analysis.labor_suggestions.comment }}</td>
+              <th>Profitability Health Status</th>
+              <td></td>
+              <td>
+                <span v-if="healthStatus" :class="healthStatus.class" :style="healthStatus.style">{{
+                  healthStatus.label
+                }}</span>
+                <span v-else>N/A</span>
+              </td>
             </tr>
           </tbody>
         </table>
-      </div>
 
-      <div v-if="analysis.ai_suggestions">
-        <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Suggested Improvements</h4>
-        <table class="w-full border-collapse mb-6 bordered-table">
-          <thead>
-            <tr class="bg-gray-100">
-              <th>Metric</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <th>Target Margin Adjustments</th>
-              <td>{{ analysis.ai_suggestions.target_margin_adjustments }}</td>
-            </tr>
-            <tr>
-              <th>Labor Allocation Improvements</th>
-              <td>{{ analysis.ai_suggestions.labor_allocation_improvements }}</td>
-            </tr>
-            <tr>
-              <th>Product Swaps</th>
-              <td>{{ analysis.ai_suggestions.product_swaps }}</td>
-            </tr>
-            <tr>
-              <th>Profitability Summary</th>
-              <td>{{ analysis.ai_suggestions.profitability_summary }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="flex justify-end mt-4" v-if="result">
-        <button
-        type="button"
-        :disabled="loading"
-        class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center"
-        @click="exportResult"
-        :class="{ 'opacity-50 cursor-not-allowed': loading }"
-        >
-        <span v-if="loading" class="loader mr-2"></span>
-        Export Result
-        </button>
-      </div>
+        <div v-if="analysis.labor_suggestions">
+          <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Labor Efficiency Analysis</h4>
+          <table class="w-full border-collapse mb-6 bordered-table">
+            <thead>
+              <tr class="bg-gray-100">
+                <th>Metric</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Estimated Sustainable Hours</th>
+                <td>{{ analysis.labor_suggestions.estimated_sustainable_hours }}</td>
+              </tr>
+              <tr>
+                <th>Labour Hours Exceeded</th>
+                <td>
+                  <span v-if="analysis.labor_suggestions.labor_hours_exceeded">Yes</span>
+                  <span v-else>No</span>
+                </td>
+              </tr>
+              <tr>
+                <th>Comment</th>
+                <td>
+                  <textarea
+                    v-model="analysis.labor_suggestions.comment"
+                    class="border border-gray-300 p-1 rounded w-full"
+                    rows="5"
+                    placeholder="Enter comment..."
+                  ></textarea>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="analysis.ai_suggestions">
+          <h4 class="text-lg font-semibold mt-8 mb-2 text-gray-900">Suggested Improvements</h4>
+          <table class="w-full border-collapse mb-6 bordered-table">
+            <thead>
+              <tr class="bg-gray-100">
+                <th>Metric</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Target Margin Adjustments</th>
+                <td>
+                  <textarea
+                    v-model="analysis.ai_suggestions.target_margin_adjustments"
+                    class="border border-gray-300 p-1 rounded w-full"
+                    rows="5"
+                    placeholder="Enter adjustments..."
+                  ></textarea>
+                </td>
+              </tr>
+              <tr>
+                <th>Labor Allocation Improvements</th>
+                <td>
+                  <textarea
+                    v-model="analysis.ai_suggestions.labor_allocation_improvements"
+                    class="border border-gray-300 p-1 rounded w-full"
+                    rows="5"
+                    placeholder="Enter improvements..."
+                  ></textarea>
+                </td>
+              </tr>
+              <tr>
+                <th>Product Swaps</th>
+                <td>
+                  <textarea
+                    v-model="analysis.ai_suggestions.product_swaps"
+                    class="border border-gray-300 p-1 rounded w-full"
+                    rows="5"
+                    placeholder="Enter product swaps..."
+                  ></textarea>
+                </td>
+              </tr>
+              <tr>
+                <th>Profitability Summary</th>
+                <td>
+                  <textarea
+                    v-model="analysis.ai_suggestions.profitability_summary"
+                    class="border border-gray-300 p-1 rounded w-full"
+                    rows="5"
+                    placeholder="Enter profitability summary..."
+                  ></textarea>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flex justify-end mt-4">
+          <button
+            type="submit"
+            :disabled="loading"
+            class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center"
+            :class="{ 'opacity-50 cursor-not-allowed': loading }"
+          >
+            <span v-if="loading" class="loader mr-2"></span>
+            Reassess
+          </button>
+          <button
+            type="button"
+            :disabled="loading"
+            class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center ml-2"
+            @click="exportResult"
+            :class="{ 'opacity-50 cursor-not-allowed': loading }"
+          >
+            <span v-if="loading" class="loader mr-2"></span>
+            Export Result
+          </button>
+        </div>
+      </form>
     </div>
   </form>
 </template>
