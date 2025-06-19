@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, nextTick } from 'vue'
 import api from '@/api'
 
 interface AdditionalInfo {
@@ -122,11 +122,18 @@ function addAdditionalField(item: Item) {
 function removeAdditionalField(item: Item, key: string) {
   delete item.additional_info[key]
 }
+
+const quoteSummary = ref<HTMLElement | null>(null)
+
 async function submitForm() {
   loading.value = true
   try {
     const { data } = await api.post('v1/quotes/analyze', form)
     result.value = data
+    await nextTick()
+    if (quoteSummary.value) {
+      quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   } finally {
     loading.value = false
   }
@@ -308,7 +315,7 @@ async function exportResult() {
       class="container mx-auto my-10 p-8 bg-white rounded-lg shadow"
       style="max-width: 900px"
     >
-      <div class="mb-4">
+      <div class="mb-4" ref="quoteSummary">
         <h2 class="text-2xl font-bold text-gray-800 inline-block relative">
           Quote Summary
           <span class="block h-0.5 bg-gray-300 mt-1 w-full"></span>
