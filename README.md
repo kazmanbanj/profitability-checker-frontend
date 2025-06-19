@@ -105,6 +105,7 @@ Frontend will be available at: http://localhost:5173
 
 ## 📁 Project Structure
 
+```text
 project-root/
 ├── frontend/               # Vue 3 Application
 │   ├── src/
@@ -114,6 +115,7 @@ project-root/
 │   │   └── views/
 │   └── public/
 └── README.md
+```
 
 ---
 
