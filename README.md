@@ -45,8 +45,8 @@ Before you begin, ensure you have the following installed:
 ## 🛠️ Installation & Setup
 Backend Setup (Laravel API): Run in terminal
 
-- **Clone the repository**: git clone https://github.com/kazmanbanj/profitability-check-backend.git
-- **Go into the folder**: cd profitability-check-backend
+- **Clone the repository**: git clone https://github.com/kazmanbanj/profitability-checker-backend.git
+- **Go into the folder**: cd profitability-checker-backend
 - **Install PHP dependencies**: composer install
 - **Environment configuration**: cp .env.example .env
 - **Generate app key**: php artisan key:generate
