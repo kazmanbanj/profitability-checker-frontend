@@ -1,41 +1,40 @@
 # 📊 Specifi Profit Optimiser
 
-A working prototype web app built with **Vue 3** and **Laravel API**, designed to help AV dealers assess the profitability of job quotes and receive AI-generated improvement suggestions.
+A prototype web app built with **Vue 3** and a **Laravel API** to help AV dealers assess job quote profitability and receive AI-powered improvement suggestions.
 
 ---
 
 ## 🚀 Tech Stack
 
-- **Frontend**: Vue 3 (Composition API, TypeScript, Vue Router, Tailwind CSS)
-- **Backend**: Laravel 12 API (PHP 8.x, MySQL)
-- **AI Integration**: Gemini for profitability suggestions
-- **Styling**: Tailwind CSS
-- **PDF Export**: Barryvdh/laravel-dompdf
+- **Frontend:** Vue 3 (Composition API, TypeScript, Vue Router, Tailwind CSS)
+- **Backend:** Laravel 12 API (PHP 8.x, MySQL)
+- **AI Integration:** Gemini (profitability suggestions)
+- **Styling:** Tailwind CSS
+- **PDF Export:** barryvdh/laravel-dompdf
 
 ---
 
 ## ✨ Features
 
-- Dynamic quote form for products, services, labor, and overheads
+- Dynamic quote form: products, services, labor, overheads
 - Financial calculations: gross profit, margin, cost breakdown
 - Profitability health indicator: 🟢 Green / 🟡 Amber / 🔴 Red
 - AI-generated suggestions for:
   - Margin improvements
   - Labor optimization
   - Product swaps
-  - Client-friendly profitability summary
+  - Client-friendly summaries
 - Editable suggestions
-- History and version tracking
-- Clear quote summary for review and export
+- History & version tracking
+- Exportable quote summaries
 
 ---
 
 ## 📋 Prerequisites
-Before you begin, ensure you have the following installed:
 
-- Node.js (v18.x or higher)
+- Node.js (v18+)
 - npm or yarn
-- PHP (8.1 or higher)
+- PHP (8.1+)
 - Composer
 - MySQL
 - Git
@@ -43,63 +42,74 @@ Before you begin, ensure you have the following installed:
 ---
 
 ## 🛠️ Installation & Setup
-Backend Setup (Laravel API): Run in terminal
 
-- **Clone the repository**: git clone https://github.com/kazmanbanj/profitability-checker-backend.git
-- **Go into the folder**: cd profitability-checker-backend
-- **Install PHP dependencies**: composer install
-- **Environment configuration**: cp .env.example .env
-- **Generate app key**: php artisan key:generate
+### Backend (Laravel API)
 
-Configure your .env file
-- DB_CONNECTION=mysql
-- DB_HOST=127.0.0.1
-- DB_PORT=3306
-- DB_DATABASE=your_database_name
-- DB_USERNAME=your_username
-- DB_PASSWORD=your_password
+```bash
+git clone https://github.com/kazmanbanj/profitability-checker-backend.git
+cd profitability-checker-backend
+composer install
+cp .env.example .env
+php artisan key:generate
+```
 
-Setup GEMINI configurations for AI suggestions in .env. To get the **GEMINI_API_KEY**:
+Edit `.env` with your database and Gemini API credentials:
 
-- visit https://ai.google.dev/gemini-api/docs, then sign in,
-- then click **Get a Gemini API Key** button,
-- Create API key,
-- Select Gemini API project,
-- Then Create API Key in Existing Project,
-- Then copy the API key generated as you can only view the key once,
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_database_name
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
 
-- Then paste the key in the env:
+GEMINI_API_KEY="your_gemini_api_key"
+GEMINI_API_BASE_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_ROLE="user"
 
-  - GEMINI_API_KEY=""
-  - GEMINI_API_BASE_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-  - GEMINI_ROLE="user"
-
-# Set CORS settings for Vue app in .env
 FRONTEND_URL=http://localhost:5173
+```
 
-# Database setup
-- php artisan migrate
-- php artisan db:seed
+Set up the database and seed data:
 
-Start the Laravel development server
-- php artisan serve
+```bash
+php artisan migrate
+php artisan db:seed
+```
 
+Start the API server:
 
-API will be available at: http://localhost:8000
+```bash
+php artisan serve
+```
 
+API available at: [http://localhost:8000](http://localhost:8000)
 
-Frontend Setup (Vue 3)
+---
 
-Open New Terminal to clone and navigate to frontend directory:
+### Frontend (Vue 3)
 
-- **run**: git clone https://github.com/kazmanbanj/profitability-checker-frontend.git
-- **Install Node.js dependencies**: npm install **or** yarn install
-- **Environment configuration**: cp .env.example .env
-- **Configure your .env file**:
-  - VITE_API_BASE_URL=http://localhost:8000
-  - VITE_SERVER_PORT=5173
-- **Start the Vue development server**: npm run dev **or** yarn dev
-Frontend will be available at: http://localhost:5173
+```bash
+git clone https://github.com/kazmanbanj/profitability-checker-frontend.git
+cd profitability-checker-frontend
+npm install # or yarn install
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_SERVER_PORT=5173
+```
+
+Start the frontend server:
+
+```bash
+npm run dev # or yarn dev
+```
+
+Frontend available at: [http://localhost:5173](http://localhost:5173)
 
 ---
 
@@ -119,26 +129,19 @@ project-root/
 
 ---
 
-❓ Troubleshooting
-Common Issues
+## ❓ Troubleshooting
 
+**CORS Errors:**
+- Ensure `FRONTEND_URL` is set correctly in Laravel `.env`
+- Check `config/cors.php`
 
-- CORS Errors:
+**API Connection Issues:**
+- Verify `VITE_API_BASE_URL` in Vue `.env`
+- Ensure Laravel server is running
 
-Ensure FRONTEND_URL is set correctly in Laravel .env
-
-Check config/cors.php configuration
-
-- API Connection Issues:
-
-Verify VITE_API_BASE_URL in Vue .env
-
-Ensure Laravel server is running on correct port
-
-- Database Connection:
-
-Check database credentials in Laravel .env
-
-Ensure database server is running
+**Database Connection:**
+- Check credentials in Laravel `.env`
+- Ensure MySQL server is running
 
 ---
+
