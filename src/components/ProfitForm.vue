@@ -55,39 +55,21 @@ const analysis = computed(() => {
   return (result.value?.data as Record<string, any>)?.ai_profitability_suggestions ?? {}
 })
 
-const currency = computed(() => {
-  return analysis.value?.currency_symbol ?? ''
-})
+const currency = computed(() => analysis.value?.currency_symbol ?? '')
 
 const healthStatus = computed(() => {
   const indicator = analysis.value?.ai_suggestions?.profitability_health_indicator
   if (!indicator) return null
   if (indicator === 'red') {
-    return {
-      label: 'Poor',
-      class: 'text-danger font-bold',
-      style: 'color: #dc2626;',
-    }
+    return { label: 'Poor', class: 'text-danger font-bold', style: 'color: #dc2626;' }
   }
   if (indicator === 'yellow') {
-    return {
-      label: 'Needs Review',
-      class: 'text-warning font-bold',
-      style: 'color: #f59e42;',
-    }
+    return { label: 'Needs Review', class: 'text-warning font-bold', style: 'color: #f59e42;' }
   }
   if (indicator === 'green') {
-    return {
-      label: 'Good',
-      class: 'text-success font-bold',
-      style: 'color: #16a34a;',
-    }
+    return { label: 'Good', class: 'text-success font-bold', style: 'color: #16a34a;' }
   }
-  return {
-    label: indicator,
-    class: '',
-    style: '',
-  }
+  return { label: indicator, class: '', style: '' }
 })
 
 function formatNumber(value: number): string {
@@ -147,7 +129,6 @@ async function resubmitForm() {
     loading.value = false
     return
   }
-
   try {
     const aiSuggestions = (result.value?.data as any)?.ai_profitability_suggestions
     const resubmit_form = {
@@ -159,9 +140,7 @@ async function resubmitForm() {
         }),
       ),
       labor_suggestions: aiSuggestions?.labor_suggestions
-        ? {
-            comment: aiSuggestions.labor_suggestions.comment,
-          }
+        ? { comment: aiSuggestions.labor_suggestions.comment }
         : undefined,
       ai_suggestions: aiSuggestions?.ai_suggestions
         ? {
