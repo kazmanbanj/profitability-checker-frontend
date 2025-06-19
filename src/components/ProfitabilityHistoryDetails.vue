@@ -41,34 +41,34 @@ onMounted(async () => {
         <p><strong>Created At:</strong> {{ formatDate(quote.created_at) }}</p>
         <p><strong>Target Profit Margin:</strong> {{ quote.target_profit_margin }}%</p>
         <p>
-          <strong>Profit Margin:</strong> {{ quote.ai_profitability_suggestions.profit_margin }}%
+          <strong>Profit Margin:</strong> {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
         </p>
         <p>
           <strong>Profitability Health: </strong>
           <span
             :class="{
               'text-green-600':
-                quote.ai_profitability_suggestions.ai_suggestions.profitability_health_indicator ===
+                quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
                 'green',
               'text-yellow-600':
-                quote.ai_profitability_suggestions.ai_suggestions.profitability_health_indicator ===
+                quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
                 'amber',
               'text-red-600':
-                quote.ai_profitability_suggestions.ai_suggestions.profitability_health_indicator ===
+                quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
                 'red',
             }"
           >
             {{
-              quote.ai_profitability_suggestions.ai_suggestions.profitability_health_indicator ===
+              quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
               'red'
                 ? 'Poor'
-                : quote.ai_profitability_suggestions.ai_suggestions
+                : quote.ai_profitability_suggestions?.ai_suggestions
                       .profitability_health_indicator === 'amber'
                   ? 'Needs Review'
-                  : quote.ai_profitability_suggestions.ai_suggestions
+                  : quote.ai_profitability_suggestions?.ai_suggestions
                         .profitability_health_indicator === 'green'
                     ? 'Good'
-                    : quote.ai_profitability_suggestions.ai_suggestions
+                    : quote.ai_profitability_suggestions?.ai_suggestions
                         .profitability_health_indicator
             }}
           </span>
@@ -91,7 +91,7 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr
-              v-for="item in quote.ai_profitability_suggestions.line_items"
+              v-for="item in quote.ai_profitability_suggestions?.line_items"
               :key="item.id"
               class="hover:bg-gray-50"
             >
@@ -123,14 +123,14 @@ onMounted(async () => {
         <p><strong>Hourly Rate:</strong> {{ formatCurrency(quote.labor_cost_per_hour) }}</p>
         <p>
           <strong>Labor Cost:</strong>
-          {{ formatCurrency(quote.ai_profitability_suggestions.labor_cost) }}
+          {{ formatCurrency(quote.ai_profitability_suggestions?.labor_cost ?? 0.00) }}
         </p>
         <p>
           <strong>Estimated Sustainable Hours:</strong>
-          {{ quote.ai_profitability_suggestions.labor_suggestions.estimated_sustainable_hours }}
+          {{ quote.ai_profitability_suggestions?.labor_suggestions.estimated_sustainable_hours }}
         </p>
         <p class="text-sm text-gray-700 mt-1 italic">
-          {{ quote.ai_profitability_suggestions.labor_suggestions.comment }}
+          {{ quote.ai_profitability_suggestions?.labor_suggestions.comment }}
         </p>
       </div>
 
@@ -139,19 +139,19 @@ onMounted(async () => {
         <div class="space-y-2 text-sm text-gray-800">
           <p>
             <strong>Target Margin Adjustments:</strong>
-            {{ quote.ai_profitability_suggestions.ai_suggestions.target_margin_adjustments }}
+            {{ quote.ai_profitability_suggestions?.ai_suggestions.target_margin_adjustments ?? 'N/A' }}
           </p>
           <p>
             <strong>Labor Allocation Improvements:</strong>
-            {{ quote.ai_profitability_suggestions.ai_suggestions.labor_allocation_improvements }}
+            {{ quote.ai_profitability_suggestions?.ai_suggestions.labor_allocation_improvements ?? 'N/A' }}
           </p>
           <p>
             <strong>Product Swaps:</strong>
-            {{ quote.ai_profitability_suggestions.ai_suggestions.product_swaps }}
+            {{ quote.ai_profitability_suggestions?.ai_suggestions.product_swaps ?? 'N/A' }}
           </p>
           <p>
             <strong>Profitability Summary:</strong>
-            {{ quote.ai_profitability_suggestions.ai_suggestions.profitability_summary }}
+            {{ quote.ai_profitability_suggestions?.ai_suggestions.profitability_summary ?? 'N/A' }}
           </p>
         </div>
       </div>

@@ -56,7 +56,7 @@ onMounted(() => {
 })
 
 const formatDate = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleDateString(undefined, {
+  return new Date(dateStr)?.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -65,7 +65,7 @@ const formatDate = (dateStr: string): string => {
 
 const formatCurrency = (value: number | string): string => {
   const num = typeof value === 'string' ? parseFloat(value) : value
-  return `$${num.toFixed(2)}`
+  return `$${num?.toFixed(2)}`
 }
 
 const healthClass = (indicator: string) => {
@@ -107,36 +107,36 @@ const healthClass = (indicator: string) => {
             <td class="p-2 border">{{ formatDate(quote.created_at) }}</td>
             <td class="p-2 border text-right">{{ quote.target_profit_margin }}%</td>
             <td class="p-2 border text-right">
-              {{ quote.ai_profitability_suggestions.profit_margin }}%
+              {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions.total_revenue) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0.00) }}
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions.total_cost) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0.00) }}
             </td>
             <td class="p-2 border text-center">
               <span
                 class="text-sm font-semibold px-3 py-1 rounded-full"
                 :class="
                   healthClass(
-                    quote.ai_profitability_suggestions.ai_suggestions
+                    quote.ai_profitability_suggestions?.ai_suggestions
                       .profitability_health_indicator,
                   )
                 "
               >
                 {{
-                  quote.ai_profitability_suggestions.ai_suggestions
+                  quote.ai_profitability_suggestions?.ai_suggestions
                     .profitability_health_indicator === 'red'
                     ? 'Poor'
-                    : quote.ai_profitability_suggestions.ai_suggestions
+                    : quote.ai_profitability_suggestions?.ai_suggestions
                           .profitability_health_indicator === 'amber'
                       ? 'Needs Review'
-                      : quote.ai_profitability_suggestions.ai_suggestions
+                      : quote.ai_profitability_suggestions?.ai_suggestions
                             .profitability_health_indicator === 'green'
                         ? 'Good'
-                        : quote.ai_profitability_suggestions.ai_suggestions
-                            .profitability_health_indicator
+                        : quote.ai_profitability_suggestions?.ai_suggestions
+                            .profitability_health_indicator ?? 'N/A'
                 }}
               </span>
             </td>
