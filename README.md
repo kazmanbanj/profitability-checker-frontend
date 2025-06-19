@@ -67,7 +67,7 @@ Setup GEMINI configurations for AI suggestions in .env. To get the **GEMINI_API_
 - Select Gemini API project,
 - Then Create API Key in Existing Project,
 - Then copy the API key generated as you can only view the key once,
-  
+
 - Then paste the key in the env:
 
   - GEMINI_API_KEY=""
