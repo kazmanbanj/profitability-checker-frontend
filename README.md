@@ -92,7 +92,7 @@ Frontend Setup (Vue 3)
 
 Open New Terminal to clone and navigate to frontend directory:
 
-- **run**: git clone https://github.com/kazmanbanj/profitability-check-backend.git
+- **run**: git clone https://github.com/kazmanbanj/profitability-checker-frontend.git
 - **Install Node.js dependencies**: npm install **or** yarn install
 - **Environment configuration**: cp .env.example .env
 - **Configure your .env file**:
