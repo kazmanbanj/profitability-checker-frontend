@@ -2,9 +2,11 @@
   <div>
     <AppHeader />
     <main class="container mx-auto p-4 text-center items-center bg-white shadow-lg rounded-lg">
-      <transition name="fade" mode="out-in">
-        <router-view />
-      </transition>
+      <router-view v-slot="{ Component }">
+        <transition>
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
   </div>
 </template>

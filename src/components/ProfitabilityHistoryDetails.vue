@@ -41,21 +41,22 @@ onMounted(async () => {
         <p><strong>Created At:</strong> {{ formatDate(quote.created_at) }}</p>
         <p><strong>Target Profit Margin:</strong> {{ quote.target_profit_margin }}%</p>
         <p>
-          <strong>Profit Margin:</strong> {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
+          <strong>Profit Margin:</strong>
+          {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
         </p>
         <p>
           <strong>Profitability Health: </strong>
           <span
             :class="{
               'text-green-600':
-                quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
-                'green',
+                quote.ai_profitability_suggestions?.ai_suggestions
+                  .profitability_health_indicator === 'green',
               'text-yellow-600':
-                quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
-                'amber',
+                quote.ai_profitability_suggestions?.ai_suggestions
+                  .profitability_health_indicator === 'amber',
               'text-red-600':
-                quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
-                'red',
+                quote.ai_profitability_suggestions?.ai_suggestions
+                  .profitability_health_indicator === 'red',
             }"
           >
             {{
@@ -123,7 +124,7 @@ onMounted(async () => {
         <p><strong>Hourly Rate:</strong> {{ formatCurrency(quote.labor_cost_per_hour) }}</p>
         <p>
           <strong>Labor Cost:</strong>
-          {{ formatCurrency(quote.ai_profitability_suggestions?.labor_cost ?? 0.00) }}
+          {{ formatCurrency(quote.ai_profitability_suggestions?.labor_cost ?? 0.0) }}
         </p>
         <p>
           <strong>Estimated Sustainable Hours:</strong>
@@ -139,11 +140,16 @@ onMounted(async () => {
         <div class="space-y-2 text-sm text-gray-800">
           <p>
             <strong>Target Margin Adjustments:</strong>
-            {{ quote.ai_profitability_suggestions?.ai_suggestions.target_margin_adjustments ?? 'N/A' }}
+            {{
+              quote.ai_profitability_suggestions?.ai_suggestions.target_margin_adjustments ?? 'N/A'
+            }}
           </p>
           <p>
             <strong>Labor Allocation Improvements:</strong>
-            {{ quote.ai_profitability_suggestions?.ai_suggestions.labor_allocation_improvements ?? 'N/A' }}
+            {{
+              quote.ai_profitability_suggestions?.ai_suggestions.labor_allocation_improvements ??
+              'N/A'
+            }}
           </p>
           <p>
             <strong>Product Swaps:</strong>

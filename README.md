@@ -144,4 +144,3 @@ project-root/
 - Ensure MySQL server is running
 
 ---
-

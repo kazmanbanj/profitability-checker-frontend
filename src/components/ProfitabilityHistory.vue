@@ -110,10 +110,10 @@ const healthClass = (indicator: string) => {
               {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0.00) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0.0) }}
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0.00) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0.0) }}
             </td>
             <td class="p-2 border text-center">
               <span
@@ -135,8 +135,8 @@ const healthClass = (indicator: string) => {
                       : quote.ai_profitability_suggestions?.ai_suggestions
                             .profitability_health_indicator === 'green'
                         ? 'Good'
-                        : quote.ai_profitability_suggestions?.ai_suggestions
-                            .profitability_health_indicator ?? 'N/A'
+                        : (quote.ai_profitability_suggestions?.ai_suggestions
+                            .profitability_health_indicator ?? 'N/A')
                 }}
               </span>
             </td>
