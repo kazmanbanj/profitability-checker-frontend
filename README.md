@@ -1,4 +1,4 @@
-# 📊 Specifi Profit Optimiser
+# 📊 Profit Optimiser
 
 A prototype web app built with **Vue 3** and a **Laravel API** to help AV dealers assess job quote profitability and receive AI-powered improvement suggestions.
 
