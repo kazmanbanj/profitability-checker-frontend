@@ -8,7 +8,7 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build",
+    "type-check": "vue-tsc --build --noEmit",
     "lint": "eslint . --fix",
     "format": "prettier --write src/"
   },
@@ -33,7 +33,9 @@
     "npm-run-all2": "^7.0.2",
     "prettier": "3.5.3",
     "typescript": "~5.8.0",
+    "unplugin-vue-components": "^28.8.0",
     "vite": "^6.2.4",
+    "vite-plugin-fonts": "^0.7.0",
     "vite-plugin-vue-devtools": "^7.7.2",
     "vue-tsc": "^2.2.8"
   }

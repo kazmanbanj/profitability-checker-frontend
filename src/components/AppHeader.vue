@@ -23,6 +23,7 @@ const route = useRoute()
 const links = [
   { to: '/', label: 'Profit Form' },
   { to: '/history', label: 'History' },
+  { to: '/image-filter', label: 'Image Filter' },
   { to: '/about', label: 'About' },
 ]
 </script>

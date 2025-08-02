@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="font-['Quicksand']">
     <AppHeader />
     <main class="container mx-auto p-4 text-center items-center bg-white shadow-lg rounded-lg">
       <router-view v-slot="{ Component }">
@@ -10,10 +10,6 @@
     </main>
   </div>
 </template>
-
-<script setup lang="ts">
-import AppHeader from '@/components/AppHeader.vue'
-</script>
 
 <style scoped>
 .fade-enter-active,

@@ -19,6 +19,11 @@ const routes: Array<RouteRecordRaw> = [
     props: true,
   },
   {
+    path: '/image-filter',
+    name: 'image-filter',
+    component: () => import('@/components/ImageFilter.vue'),
+  },
+  {
     path: '/about',
     name: 'about',
     component: () => import('@/views/AboutView.vue'),
