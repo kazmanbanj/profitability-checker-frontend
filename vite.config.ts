@@ -22,7 +22,11 @@ export default defineConfig({
         }]
       }
     }),
-    Components()
+    Components({
+      dirs: ['src/components'],
+      directoryAsNamespace: true,
+      deep: true,
+    })
   ],
   resolve: {
     alias: {

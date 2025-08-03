@@ -1,33 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed, nextTick } from 'vue'
 import api from '@/api'
-
-interface AdditionalInfo {
-  [key: string]: string
-}
-
-interface Item {
-  name: string
-  cost_price: number
-  sell_price: number
-  quantity: number
-  additional_info: AdditionalInfo
-}
-
-interface Form {
-  line_items: Item[]
-  labor_hours: number
-  labor_cost_per_hour: number
-  fixed_overheads: number
-  target_profit_margin: number
-}
-
-interface Result {
-  success: boolean
-  data: object
-  message: string
-  error: string[]
-}
+import type { Item, Form, Result } from '@/interfaces'
 
 const form = reactive<Form>({
   line_items: [

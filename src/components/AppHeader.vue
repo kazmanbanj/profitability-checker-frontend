@@ -1,6 +1,6 @@
 <template>
   <header class="bg-blue-600 text-white px-6 py-4 shadow-md flex justify-between items-center">
-    <h1 class="text-xl font-semibold">Specifi Profit Optimiser</h1>
+    <h1 class="text-xl font-semibold">Profit Optimiser</h1>
     <nav class="space-x-4">
       <router-link
         v-for="link in links"

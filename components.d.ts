@@ -10,11 +10,16 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppBackground: typeof import('./src/components/AppBackground.vue')['default']
     AppHeader: typeof import('./src/components/AppHeader.vue')['default']
+    FormsAddAdditionalInfo: typeof import('./src/components/forms/AddAdditionalInfo.vue')['default']
+    ImageDragDrop: typeof import('./src/components/ui/ImageDragDrop.vue')['default']
     ImageFilter: typeof import('./src/components/ImageFilter.vue')['default']
+    ImageUpload: typeof import('./src/components/ui/ImageUpload.vue')['default']
     ProfitabilityHistory: typeof import('./src/components/ProfitabilityHistory.vue')['default']
     ProfitabilityHistoryDetails: typeof import('./src/components/ProfitabilityHistoryDetails.vue')['default']
     ProfitForm: typeof import('./src/components/ProfitForm.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    UiImageDragDrop: typeof import('./src/components/ui/ImageDragDrop.vue')['default']
+    UiImageEditor: typeof import('./src/components/ui/ImageEditor.vue')['default']
   }
 }
