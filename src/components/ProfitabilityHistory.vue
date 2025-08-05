@@ -18,12 +18,10 @@ type Quote = {
   ai_profitability_suggestions: ProfitabilitySuggestions
 }
 
-// State
 const quotes = ref<Quote[]>([])
 const loading = ref(true)
 const error = ref(false)
 
-// Pagination state
 const currentPage = ref(1)
 const totalPages = ref(1)
 const pageSize = ref(10)
@@ -152,7 +150,6 @@ const healthClass = (indicator: string) => {
         </tbody>
       </table>
       <div class="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
-        <!-- Page Size Selector -->
         <div class="flex items-center">
           <label for="page-size" class="mr-2 font-medium">Page size:</label>
           <select
@@ -166,7 +163,6 @@ const healthClass = (indicator: string) => {
             </option>
           </select>
         </div>
-        <!-- Pagination Controls -->
         <div class="flex items-center">
           <button
             class="px-3 py-1 rounded border mr-2"
