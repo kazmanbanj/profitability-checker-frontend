@@ -3,9 +3,14 @@
     <h1 class="text-4xl font-bold text-center text-indigo-700 mb-10">Image Filters</h1>
 
     <!-- Drop Area -->
-    <UiImageDragDrop />
+    <UiImageDragDrop v-if="!store.file" />
 
     <!-- Canvas and Buttons -->
-    <UiImageEditor />
+    <UiImageEditor v-else />
   </section>
 </template>
+<script setup lang="ts">
+import { useImageStore } from '@/stores/image'
+
+const store = useImageStore()
+</script>
