@@ -116,15 +116,46 @@ Frontend available at: [http://localhost:5173](http://localhost:5173)
 ## 📁 Project Structure
 
 ```text
-project-root/
-├── frontend/               # Vue 3 Application
-│   ├── src/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   ├── router/
-│   │   └── views/
-│   └── public/
-└── README.md
+├── 📁 .git/ 🚫 (auto-hidden)
+├── 📁 .vscode/ 🚫 (auto-hidden)
+├── 📁 node_modules/ 🚫 (auto-hidden)
+├── 📁 public/
+│   └── 🖼️ profitability.ico
+├── 📁 src/
+│   ├── 📁 assets/
+│   │   ├── 🎨 base.css
+│   │   └── 🎨 main.css
+│   ├── 📁 components/
+│   │   ├── 📁 forms/
+│   │   ├── 🟢 AppHeader.vue
+│   │   ├── 🟢 ProfitForm.vue
+│   │   ├── 🟢 ProfitabilityHistory.vue
+│   │   └── 🟢 ProfitabilityHistoryDetails.vue
+│   ├── 📁 router/
+│   │   └── 📄 index.ts
+│   ├── 📁 views/
+│   │   └── 🟢 AboutView.vue
+│   ├── 🟢 App.vue
+│   ├── 📄 api.ts
+│   └── 📄 main.ts
+├── 📄 .editorconfig
+├── 🔒 .env 🚫 (auto-hidden)
+├── 📄 .env.example
+├── 📄 .gitattributes
+├── 🚫 .gitignore
+├── 📄 .prettierrc.json
+├── 📖 README.md
+├── 📄 env.d.ts
+├── 📄 eslint.config.ts
+├── 🌐 index.html
+├── 📄 package-lock.json 🚫 (auto-hidden)
+├── 📄 package.json
+├── 📄 tsconfig.app.json
+├── 📄 tsconfig.json
+├── 📄 tsconfig.node.json
+├── 📄 tsconfig.tsbuildinfo 🚫 (auto-hidden)
+├── 📄 vite.config.ts
+└── 🔒 yarn.lock 🚫 (auto-hidden)
 ```
 
 ---
