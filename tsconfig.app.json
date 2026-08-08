@@ -9,7 +9,9 @@
       "@/*": ["./src/*"]
     },
     "composite": true,
-    "noEmit": true,
-    "emitDeclarationOnly": false
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationDir": "./node_modules/.tmp/types"
   }
 }
