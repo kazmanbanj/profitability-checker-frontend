@@ -3,12 +3,8 @@ import { reactive, ref, computed, nextTick } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useFormatters } from '@/composables/useFormatters'
 import { useApiError } from '@/composables/useApiError'
-import {
-  analyzeQuote,
-  reAnalyzeQuote,
-  exportQuoteAnalysis,
-} from '@/services/quoteService'
-import type { AnalyzeQuoteResponse } from '@/services/quoteService'
+import { useQuoteStore } from '@/stores/useQuoteStore'
+import { useQuoteHistoryStore } from '@/stores/useQuoteHistoryStore'
 
 interface AdditionalInfo {
   [key: string]: string
@@ -37,10 +33,7 @@ const form = reactive<Form>({
       cost_price: 0,
       sell_price: 0,
       quantity: 1,
-      additional_info: {
-        MPN: '',
-        SKU: '',
-      },
+      additional_info: { MPN: '', SKU: '' },
     },
   ],
   labor_hours: 0,
@@ -49,20 +42,23 @@ const form = reactive<Form>({
   target_profit_margin: 30,
 })
 
-const result = ref<AnalyzeQuoteResponse | null>(null)
-const loading = ref(false)
 const error = ref<string | null>(null)
+const quoteSummary = ref<HTMLElement | null>(null)
+
+const quoteStore = useQuoteStore()
+const historyStore = useQuoteHistoryStore()
 const { success: toastSuccess, error: toastError } = useToast()
-const { formatNumber, formatCurrency, resolveHealth } = useFormatters()
+const { formatNumber, resolveHealth } = useFormatters()
 const { extractErrorMessage } = useApiError()
 
-const analysis = computed<import('@/services/quoteService').AiProfitabilitySuggestions | null>(
-  () => result.value?.data?.ai_profitability_suggestions ?? null,
+// Delegate result/loading/analysis/currency to the store
+const result   = computed(() => quoteStore.result)
+const loading  = computed(() => quoteStore.loading)
+const analysis = computed(() => quoteStore.analysis)
+const currency = computed(() => quoteStore.currency)
+const healthStatus = computed(() =>
+  resolveHealth(analysis.value?.ai_suggestions?.profitability_health_indicator),
 )
-
-const currency = computed(() => analysis.value?.currency_symbol ?? '')
-
-const healthStatus = computed(() => resolveHealth(analysis.value?.ai_suggestions?.profitability_health_indicator))
 
 function addItem() {
   form.line_items.push({
@@ -70,10 +66,7 @@ function addItem() {
     cost_price: 0,
     sell_price: 0,
     quantity: 1,
-    additional_info: {
-      MPN: '',
-      SKU: '',
-    },
+    additional_info: { MPN: '', SKU: '' },
   })
 }
 
@@ -102,25 +95,15 @@ function removeAdditionalField(item: Item, key: string) {
 function resetForm() {
   if (result.value && !confirm('Start a new quote? Your current results will be cleared.')) return
   Object.assign(form, {
-    line_items: [
-      {
-        name: '',
-        cost_price: 0,
-        sell_price: 0,
-        quantity: 1,
-        additional_info: { MPN: '', SKU: '' },
-      },
-    ],
+    line_items: [{ name: '', cost_price: 0, sell_price: 0, quantity: 1, additional_info: { MPN: '', SKU: '' } }],
     labor_hours: 0,
     labor_cost_per_hour: 0,
     fixed_overheads: 0,
     target_profit_margin: 30,
   })
-  result.value = null
+  quoteStore.clear()
   error.value = null
 }
-
-const quoteSummary = ref<HTMLElement | null>(null)
 
 async function submitForm() {
   error.value = null
@@ -139,34 +122,28 @@ async function submitForm() {
     return
   }
 
-  loading.value = true
   try {
-    result.value = await analyzeQuote(form)
+    await quoteStore.analyze(form)
+    // Invalidate history cache so the list re-fetches on next visit
+    historyStore.invalidateList()
     toastSuccess('Profitability analysis complete.')
     await nextTick()
-    if (quoteSummary.value) {
-      quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    quoteSummary.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (err) {
     toastError(extractErrorMessage(err))
-  } finally {
-    loading.value = false
   }
 }
 
 async function resubmitForm() {
-  loading.value = true
   error.value = null
-  const quoteId = result.value?.data?.id
-  if (!quoteId) {
+  if (!quoteStore.quoteId) {
     toastError('Quote ID not found in result.')
-    loading.value = false
     return
   }
   try {
-    const aiSuggestions = result.value?.data?.ai_profitability_suggestions
-    result.value = await reAnalyzeQuote(quoteId, {
-      quote_id: quoteId,
+    const aiSuggestions = analysis.value
+    await quoteStore.reAnalyze({
+      quote_id: quoteStore.quoteId,
       line_items: aiSuggestions?.line_items?.map((li) => ({
         id: li.id,
         suggestion: li.suggestion,
@@ -177,8 +154,7 @@ async function resubmitForm() {
       ai_suggestions: aiSuggestions?.ai_suggestions
         ? {
             target_margin_adjustments: aiSuggestions.ai_suggestions.target_margin_adjustments,
-            labor_allocation_improvements:
-              aiSuggestions.ai_suggestions.labor_allocation_improvements,
+            labor_allocation_improvements: aiSuggestions.ai_suggestions.labor_allocation_improvements,
             product_swaps: aiSuggestions.ai_suggestions.product_swaps,
             profitability_summary: aiSuggestions.ai_suggestions.profitability_summary,
           }
@@ -186,39 +162,19 @@ async function resubmitForm() {
     })
     toastSuccess('Re-analysis complete.')
     await nextTick()
-    if (quoteSummary.value) {
-      quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    quoteSummary.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (err) {
     toastError(extractErrorMessage(err))
-  } finally {
-    loading.value = false
   }
 }
 
 async function exportResult() {
   if (!result.value) return
-  const quoteId = result.value?.data?.id
-  if (!quoteId) {
-    toastError('Quote ID not found in result.')
-    return
-  }
-  loading.value = true
   try {
-    const blob = await exportQuoteAnalysis(quoteId)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `profitability_result_${quoteId}.pdf`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    await quoteStore.exportPdf()
     toastSuccess('PDF exported successfully.')
   } catch (err) {
     toastError(extractErrorMessage(err))
-  } finally {
-    loading.value = false
   }
 }
 </script>
@@ -399,7 +355,7 @@ async function exportResult() {
     </div>
 
     <div
-      v-if="result"
+      v-if="result && analysis"
       class="container mx-auto my-10 p-8 bg-white rounded-lg shadow"
       style="max-width: 900px"
     >

@@ -1,59 +1,49 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useToast } from '@/composables/useToast'
 import { useFormatters } from '@/composables/useFormatters'
-import { listQuotes } from '@/services/quoteService'
-import type { QuoteListItem } from '@/services/quoteService'
+import { useQuoteHistoryStore } from '@/stores/useQuoteHistoryStore'
 
-const quotes = ref<QuoteListItem[]>([])
-const loading = ref(true)
-const fetchFailed = ref(false)
-
-const currentPage = ref(1)
-const totalPages = ref(1)
-const pageSize = ref(10)
-
+const historyStore = useQuoteHistoryStore()
 const { error: toastError } = useToast()
 const { formatDate, formatCurrency, resolveHealth } = useFormatters()
 
-const paginatedQuotes = computed(() => quotes.value)
+const {
+  quotes,
+  currentPage,
+  totalPages,
+  pageSize,
+  listLoading,
+  listFailed,
+} = storeToRefs(historyStore)
 
-const goToPage = (page: number) => {
-  if (page >= 1 && page <= totalPages.value) {
-    fetchQuotes(page)
-  }
-}
-
-const fetchQuotes = async (page = 1) => {
-  loading.value = true
-  fetchFailed.value = false
+async function fetchQuotes(page = 1) {
   try {
-    const res = await listQuotes(page, pageSize.value)
-    quotes.value = res.data?.data || []
-    totalPages.value = res.data?.last_page || 1
-    currentPage.value = res.data?.current_page || 1
+    await historyStore.fetchQuotes(page)
   } catch {
-    fetchFailed.value = true
     toastError('Failed to load quotes. You can retry below.')
-  } finally {
-    loading.value = false
   }
 }
 
-onMounted(() => {
-  fetchQuotes()
-})
+function goToPage(page: number) {
+  historyStore.goToPage(page)
+}
 
+function onPageSizeChange() {
+  historyStore.setPageSize(pageSize.value)
+}
 
+onMounted(() => fetchQuotes())
 </script>
 
 <template>
   <section class="max-w-6xl mx-auto p-6">
     <h2 class="text-2xl font-bold mb-6">Quote History</h2>
 
-    <div v-if="loading" class="text-gray-600">Loading quotes...</div>
+    <div v-if="listLoading" class="text-gray-600">Loading quotes...</div>
     <div
-      v-else-if="fetchFailed"
+      v-else-if="listFailed"
       class="flex flex-col items-center gap-3 py-10 text-gray-600"
     >
       <p class="text-sm">Could not load quotes. Check your connection and try again.</p>
@@ -82,7 +72,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="quote in paginatedQuotes" :key="quote.id" class="hover:bg-gray-50">
+          <tr v-for="quote in quotes" :key="quote.id" class="hover:bg-gray-50">
             <td class="p-2 border font-semibold">#{{ quote.id }}</td>
             <td class="p-2 border">{{ formatDate(quote.created_at) }}</td>
             <td class="p-2 border text-right">{{ quote.target_profit_margin }}%</td>
@@ -90,27 +80,17 @@ onMounted(() => {
               {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0.0) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0) }}
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0.0) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0) }}
             </td>
             <td class="p-2 border text-center">
               <span
                 class="text-sm font-semibold px-3 py-1 rounded-full"
-                :class="
-                  resolveHealth(
-                    quote.ai_profitability_suggestions?.ai_suggestions
-                      .profitability_health_indicator,
-                  ).badgeClass
-                "
+                :class="resolveHealth(quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator).badgeClass"
               >
-                {{
-                  resolveHealth(
-                    quote.ai_profitability_suggestions?.ai_suggestions
-                      .profitability_health_indicator,
-                  ).label
-                }}
+                {{ resolveHealth(quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator).label }}
               </span>
             </td>
             <td class="p-2 border text-center">
@@ -124,13 +104,14 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
+
       <div class="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
         <div class="flex items-center">
           <label for="page-size" class="mr-2 font-medium">Page size:</label>
           <select
             id="page-size"
             v-model="pageSize"
-            @change="fetchQuotes(currentPage)"
+            @change="onPageSizeChange"
             class="border rounded px-2 py-1"
           >
             <option v-for="size in [5, 10, 15, 20, 50]" :key="size" :value="size">
@@ -146,7 +127,7 @@ onMounted(() => {
           >
             Prev
           </button>
-          <span> Page {{ currentPage }} of {{ totalPages }} </span>
+          <span>Page {{ currentPage }} of {{ totalPages }}</span>
           <button
             class="px-3 py-1 rounded border ml-2"
             :disabled="currentPage === totalPages || totalPages === 0"
