@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { reactive, ref, computed, nextTick } from 'vue'
-import api from '@/api'
+import { useToast } from '@/composables/useToast'
+import { useFormatters } from '@/composables/useFormatters'
+import { useApiError } from '@/composables/useApiError'
+import { useQuoteStore } from '@/stores/useQuoteStore'
+import { useQuoteHistoryStore } from '@/stores/useQuoteHistoryStore'
 
 interface AdditionalInfo {
   [key: string]: string
@@ -22,13 +26,6 @@ interface Form {
   target_profit_margin: number
 }
 
-interface Result {
-  success: boolean
-  data: object
-  message: string
-  error: string[]
-}
-
 const form = reactive<Form>({
   line_items: [
     {
@@ -36,10 +33,7 @@ const form = reactive<Form>({
       cost_price: 0,
       sell_price: 0,
       quantity: 1,
-      additional_info: {
-        MPN: '',
-        SKU: '',
-      },
+      additional_info: { MPN: '', SKU: '' },
     },
   ],
   labor_hours: 0,
@@ -48,34 +42,23 @@ const form = reactive<Form>({
   target_profit_margin: 30,
 })
 
-const result = ref<Result | null>(null)
-const loading = ref(false)
+const error = ref<string | null>(null)
+const quoteSummary = ref<HTMLElement | null>(null)
 
-const analysis = computed(() => {
-  return (result.value?.data as Record<string, any>)?.ai_profitability_suggestions ?? {}
-})
+const quoteStore = useQuoteStore()
+const historyStore = useQuoteHistoryStore()
+const { success: toastSuccess, error: toastError } = useToast()
+const { formatNumber, resolveHealth } = useFormatters()
+const { extractErrorMessage } = useApiError()
 
-const currency = computed(() => analysis.value?.currency_symbol ?? '')
-
-const healthStatus = computed(() => {
-  const indicator = analysis.value?.ai_suggestions?.profitability_health_indicator
-  if (!indicator) return null
-  if (indicator === 'red') {
-    return { label: 'Poor', class: 'text-danger font-bold', style: 'color: #dc2626;' }
-  }
-  if (indicator === 'yellow') {
-    return { label: 'Needs Review', class: 'text-warning font-bold', style: 'color: #f59e42;' }
-  }
-  if (indicator === 'green') {
-    return { label: 'Good', class: 'text-success font-bold', style: 'color: #16a34a;' }
-  }
-  return { label: indicator, class: '', style: '' }
-})
-
-function formatNumber(value: number): string {
-  if (typeof value !== 'number' || isNaN(value)) return '0.00'
-  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+// Delegate result/loading/analysis/currency to the store
+const result   = computed(() => quoteStore.result)
+const loading  = computed(() => quoteStore.loading)
+const analysis = computed(() => quoteStore.analysis)
+const currency = computed(() => quoteStore.currency)
+const healthStatus = computed(() =>
+  resolveHealth(analysis.value?.ai_suggestions?.profitability_health_indicator),
+)
 
 function addItem() {
   form.line_items.push({
@@ -83,14 +66,18 @@ function addItem() {
     cost_price: 0,
     sell_price: 0,
     quantity: 1,
-    additional_info: {
-      MPN: '',
-      SKU: '',
-    },
+    additional_info: { MPN: '', SKU: '' },
   })
 }
 
 function removeItem(index: number) {
+  if (form.line_items.length === 1) {
+    error.value = 'At least one line item is required.'
+    return
+  }
+  const item = form.line_items[index]
+  const label = item.name.trim() ? `"${item.name}"` : `item ${index + 1}`
+  if (!confirm(`Remove ${label}?`)) return
   form.line_items.splice(index, 1)
 }
 
@@ -105,88 +92,96 @@ function removeAdditionalField(item: Item, key: string) {
   delete item.additional_info[key]
 }
 
-const quoteSummary = ref<HTMLElement | null>(null)
+function resetForm() {
+  if (result.value && !confirm('Start a new quote? Your current results will be cleared.')) return
+  Object.assign(form, {
+    line_items: [{ name: '', cost_price: 0, sell_price: 0, quantity: 1, additional_info: { MPN: '', SKU: '' } }],
+    labor_hours: 0,
+    labor_cost_per_hour: 0,
+    fixed_overheads: 0,
+    target_profit_margin: 30,
+  })
+  quoteStore.clear()
+  error.value = null
+}
 
 async function submitForm() {
-  loading.value = true
+  error.value = null
+
+  if (form.line_items.length === 0) {
+    error.value = 'Add at least one line item before checking profitability.'
+    return
+  }
+
+  const invalidItem = form.line_items.find(
+    (item) => item.cost_price <= 0 || item.sell_price <= 0 || item.quantity < 1,
+  )
+  if (invalidItem) {
+    const label = invalidItem.name.trim() ? `"${invalidItem.name}"` : 'one of your items'
+    error.value = `Cost price, sell price, and quantity must all be greater than zero (check ${label}).`
+    return
+  }
+
   try {
-    const { data } = await api.post('v1/quotes/analyze', form)
-    result.value = data
-    await nextTick()
-    if (quoteSummary.value) {
-      quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    await quoteStore.analyze(form)
+
+    if (quoteStore.queued) {
+      // Offline — submission queued, give feedback without clearing the form
+      toastSuccess('You\'re offline. Your submission has been saved and will sync automatically when you reconnect.', 7000)
+      return
     }
-  } finally {
-    loading.value = false
+
+    // Invalidate history cache so the list re-fetches on next visit
+    historyStore.invalidateList()
+    toastSuccess('Profitability analysis complete.')
+    await nextTick()
+    quoteSummary.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   }
 }
 
 async function resubmitForm() {
-  loading.value = true
-  const quoteId = (result.value?.data as { id?: string | number })?.id
-  if (!quoteId) {
-    alert('Quote ID not found in result.')
-    loading.value = false
+  error.value = null
+  if (!quoteStore.quoteId) {
+    toastError('Quote ID not found in result.')
     return
   }
   try {
-    const aiSuggestions = (result.value?.data as any)?.ai_profitability_suggestions
-    const resubmit_form = {
-      quote_id: quoteId,
-      line_items: aiSuggestions?.line_items?.map(
-        (li: { id: string | number; suggestion: string }) => ({
-          id: li.id,
-          suggestion: li.suggestion,
-        }),
-      ),
+    const aiSuggestions = analysis.value
+    await quoteStore.reAnalyze({
+      quote_id: quoteStore.quoteId,
+      line_items: aiSuggestions?.line_items?.map((li) => ({
+        id: li.id,
+        suggestion: li.suggestion,
+      })),
       labor_suggestions: aiSuggestions?.labor_suggestions
         ? { comment: aiSuggestions.labor_suggestions.comment }
         : undefined,
       ai_suggestions: aiSuggestions?.ai_suggestions
         ? {
             target_margin_adjustments: aiSuggestions.ai_suggestions.target_margin_adjustments,
-            labor_allocation_improvements:
-              aiSuggestions.ai_suggestions.labor_allocation_improvements,
+            labor_allocation_improvements: aiSuggestions.ai_suggestions.labor_allocation_improvements,
             product_swaps: aiSuggestions.ai_suggestions.product_swaps,
             profitability_summary: aiSuggestions.ai_suggestions.profitability_summary,
           }
         : undefined,
-    }
-    const { data } = await api.post(`v1/quotes/${quoteId}/re-analyze`, resubmit_form)
-    result.value = data
+    })
+    toastSuccess('Re-analysis complete.')
     await nextTick()
-    if (quoteSummary.value) {
-      quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  } finally {
-    loading.value = false
+    quoteSummary.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   }
 }
 
 async function exportResult() {
   if (!result.value) return
-  const quoteId = (result.value?.data as { id?: string | number })?.id
-  if (!quoteId) {
-    alert('Quote ID not found in result.')
-    return
-  }
-  loading.value = true
   try {
-    const response = await api.get(`v1/quotes/${quoteId}/export-analysis`, {
-      responseType: 'blob',
-      params: { format: 'pdf' },
-    })
-    const blob = new Blob([response.data], { type: 'application/pdf' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `profitability_result_${quoteId}.pdf`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  } finally {
-    loading.value = false
+    await quoteStore.exportPdf()
+    toastSuccess('PDF exported successfully.')
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   }
 }
 </script>
@@ -216,6 +211,8 @@ async function exportResult() {
           <input
             v-model.number="item.cost_price"
             type="number"
+            min="0.01"
+            step="0.01"
             class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -225,6 +222,8 @@ async function exportResult() {
           <input
             v-model.number="item.sell_price"
             type="number"
+            min="0.01"
+            step="0.01"
             class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -234,12 +233,14 @@ async function exportResult() {
           <input
             v-model.number="item.quantity"
             type="number"
+            min="1"
+            step="1"
             class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
         </div>
         <div class="text-right">
-          <button type="button" @click="removeItem(index)" class="text-red-500 hover:text-red-700">
+          <button type="button" @click="removeItem(index)" class="text-red-500 hover:text-red-700 transition-colors">
             🗑️ Remove Item
           </button>
         </div>
@@ -261,7 +262,7 @@ async function exportResult() {
         <div class="text-left">
           <button
             type="button"
-            class="text-red-500 hover:text-red-700"
+            class="text-red-500 hover:text-red-700 transition-colors"
             @click="removeAdditionalField(item, String(key))"
           >
             Remove
@@ -273,7 +274,7 @@ async function exportResult() {
         <button
           type="button"
           @click="addAdditionalField(item)"
-          class="text-blue-600 hover:text-blue-800"
+          class="text-emerald-700 hover:text-emerald-900 transition-colors"
         >
           ➕ Add Additional Info
         </button>
@@ -281,7 +282,7 @@ async function exportResult() {
     </div>
 
     <div class="text-right">
-      <button type="button" @click="addItem" class="text-green-600 hover:text-green-800">
+      <button type="button" @click="addItem" class="text-emerald-700 hover:text-emerald-900 transition-colors">
         ➕ Add Item
       </button>
     </div>
@@ -322,20 +323,46 @@ async function exportResult() {
       </div>
     </div>
     <br />
-    <div class="flex justify-center">
+    <div
+      v-if="error"
+      role="alert"
+      class="flex items-start gap-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"
+    >
+      <span class="mt-0.5 shrink-0" aria-hidden="true">⚠️</span>
+      <span>{{ error }}</span>
+      <button
+        type="button"
+        class="ml-auto shrink-0 text-red-400 hover:text-red-600"
+        aria-label="Dismiss error"
+        @click="error = null"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div class="flex justify-center gap-3">
       <button
         type="submit"
         :disabled="loading"
-        class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 mt-4 flex items-center justify-center"
+        class="bg-indigo-600 text-white px-6 py-2 rounded shadow hover:bg-indigo-700 mt-4 flex items-center justify-center transition-colors"
         :class="{ 'opacity-50 cursor-not-allowed': loading }"
       >
         <span v-if="loading" class="loader mr-2"></span>
         {{ loading ? 'Checking...' : 'Check Profitability' }}
       </button>
+      <button
+        type="button"
+        :disabled="loading"
+        class="bg-slate-100 text-slate-700 border border-slate-300 px-6 py-2 rounded shadow hover:bg-slate-200 mt-4 transition-colors"
+        :class="{ 'opacity-50 cursor-not-allowed': loading }"
+        @click="resetForm"
+      >
+        Clear Form
+      </button>
     </div>
 
     <div
-      v-if="result"
+      v-if="result && analysis"
       class="container mx-auto my-10 p-8 bg-white rounded-lg shadow"
       style="max-width: 900px"
     >
@@ -364,7 +391,7 @@ async function exportResult() {
           </thead>
           <tbody>
             <tr
-              v-for="(li, idx) in (result.data as any)?.ai_profitability_suggestions?.line_items"
+              v-for="(li, idx) in result.data?.ai_profitability_suggestions?.line_items"
               :key="idx"
             >
               <td>{{ li.name }}</td>
@@ -507,7 +534,7 @@ async function exportResult() {
               <th>Profitability Health Status</th>
               <td></td>
               <td>
-                <span v-if="healthStatus" :class="healthStatus.class" :style="healthStatus.style">{{
+                <span v-if="healthStatus" :class="healthStatus.colorClass" class="font-bold">{{
                   healthStatus.label
                 }}</span>
                 <span v-else>N/A</span>
@@ -613,7 +640,7 @@ async function exportResult() {
           <button
             type="submit"
             :disabled="loading"
-            class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center"
+            class="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 flex items-center transition-colors"
             :class="{ 'opacity-50 cursor-not-allowed': loading }"
           >
             <span v-if="loading" class="loader mr-2"></span>
@@ -622,7 +649,7 @@ async function exportResult() {
           <button
             type="button"
             :disabled="loading"
-            class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center ml-2"
+            class="bg-slate-700 text-white px-4 py-2 rounded shadow hover:bg-slate-800 flex items-center ml-2 transition-colors"
             @click="exportResult"
             :class="{ 'opacity-50 cursor-not-allowed': loading }"
           >

@@ -1,6 +1,7 @@
 <template>
   <div>
     <AppHeader />
+    <OfflineBanner />
     <main class="container mx-auto p-4 text-center items-center bg-white shadow-lg rounded-lg">
       <router-view v-slot="{ Component }">
         <transition>
@@ -8,11 +9,14 @@
         </transition>
       </router-view>
     </main>
+    <ToastContainer />
   </div>
 </template>
 
 <script setup lang="ts">
 import AppHeader from '@/components/AppHeader.vue'
+import ToastContainer from '@/components/ToastContainer.vue'
+import OfflineBanner from '@/components/OfflineBanner.vue'
 </script>
 
 <style scoped>

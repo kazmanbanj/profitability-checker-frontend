@@ -1,166 +1,293 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '@/api'
+import { storeToRefs } from 'pinia'
+import { useToast } from '@/composables/useToast'
+import { useFormatters } from '@/composables/useFormatters'
+import { useApiError } from '@/composables/useApiError'
+import { useQuoteHistoryStore } from '@/stores/useQuoteHistoryStore'
+import type { AiProfitabilitySuggestions } from '@/services/quoteService'
 
 const route = useRoute()
 const quoteId = route.params.id as string
 
-const quote = ref<any>(null)
-const loading = ref(true)
-const error = ref(false)
+const historyStore = useQuoteHistoryStore()
+const { detailLoading, detailFailed } = storeToRefs(historyStore)
 
-const formatCurrency = (value: number | string): string => {
-  const num = typeof value === 'string' ? parseFloat(value) : value
-  return `$${num.toFixed(2)}`
+// Component-local loading flag for re-analyze / export button actions
+const actionLoading = ref(false)
+
+const { success: toastSuccess, error: toastError } = useToast()
+const { formatCurrency, formatDateTime, resolveHealth } = useFormatters()
+const { extractErrorMessage } = useApiError()
+
+// Read quote from the store's detail cache
+const quote = computed(() => historyStore.getCachedDetail(quoteId) ?? null)
+
+const analysis = computed<AiProfitabilitySuggestions | null>(
+  () => quote.value?.ai_profitability_suggestions ?? null,
+)
+
+const healthStatus = computed(() =>
+  resolveHealth(analysis.value?.ai_suggestions?.profitability_health_indicator),
+)
+
+async function loadQuote() {
+  try {
+    await historyStore.fetchDetail(quoteId)
+  } catch {
+    toastError('Failed to load quote details.')
+  }
 }
 
-const formatDate = (val: string): string => new Date(val).toLocaleString()
+onMounted(loadQuote)
 
-onMounted(async () => {
+async function reAnalyze() {
+  if (!quote.value) return
+  actionLoading.value = true
   try {
-    const res = await api.get(`v1/quotes/${quoteId}`)
-    quote.value = res.data.data
-  } catch {
-    error.value = true
+    const aiSuggestions = analysis.value
+    await historyStore.reAnalyzeDetail(quoteId, {
+      quote_id: quoteId,
+      line_items: aiSuggestions?.line_items?.map((li) => ({
+        id: li.id,
+        suggestion: li.suggestion,
+      })),
+      labor_suggestions: aiSuggestions?.labor_suggestions
+        ? { comment: aiSuggestions.labor_suggestions.comment }
+        : undefined,
+      ai_suggestions: aiSuggestions?.ai_suggestions
+        ? {
+            target_margin_adjustments: aiSuggestions.ai_suggestions.target_margin_adjustments,
+            labor_allocation_improvements:
+              aiSuggestions.ai_suggestions.labor_allocation_improvements,
+            product_swaps: aiSuggestions.ai_suggestions.product_swaps,
+            profitability_summary: aiSuggestions.ai_suggestions.profitability_summary,
+          }
+        : undefined,
+    })
+    toastSuccess('Re-analysis complete.')
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   } finally {
-    loading.value = false
+    actionLoading.value = false
   }
-})
+}
+
+async function exportPdf() {
+  actionLoading.value = true
+  try {
+    await historyStore.exportDetailPdf(quoteId)
+    toastSuccess('PDF exported successfully.')
+  } catch (err) {
+    toastError(extractErrorMessage(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
 </script>
 
 <template>
   <section class="max-w-6xl mx-auto p-6">
-    <h2 class="text-2xl font-bold mb-4">Quote Details - #{{ quoteId }}</h2>
+    <h2 class="text-2xl font-bold mb-4">Quote Details — #{{ quoteId }}</h2>
 
-    <div v-if="loading" class="text-gray-500">Loading...</div>
-    <div v-else-if="error" class="text-red-600">Failed to load quote details.</div>
+    <div v-if="detailLoading" class="text-gray-500">Loading...</div>
 
-    <div v-else class="bg-white shadow rounded p-6">
-      <div class="mb-4">
-        <p><strong>Created At:</strong> {{ formatDate(quote.created_at) }}</p>
+    <div
+      v-else-if="detailFailed"
+      class="flex flex-col items-center gap-3 py-10 text-gray-600"
+    >
+      <p class="text-sm">Could not load quote details. Check your connection and try again.</p>
+      <button
+        class="px-4 py-2 rounded bg-slate-700 text-white hover:bg-slate-800 text-sm transition-colors"
+        @click="loadQuote"
+      >
+        Retry
+      </button>
+    </div>
+
+    <div v-else-if="quote" class="bg-white shadow rounded p-6 space-y-8">
+
+      <!-- Summary -->
+      <div class="space-y-1">
+        <p><strong>Created At:</strong> {{ formatDateTime(quote.created_at) }}</p>
         <p><strong>Target Profit Margin:</strong> {{ quote.target_profit_margin }}%</p>
+        <p><strong>Profit Margin:</strong> {{ analysis?.profit_margin ?? 'N/A' }}%</p>
         <p>
-          <strong>Profit Margin:</strong>
-          {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
-        </p>
-        <p>
-          <strong>Profitability Health: </strong>
-          <span
-            :class="{
-              'text-green-600':
-                quote.ai_profitability_suggestions?.ai_suggestions
-                  .profitability_health_indicator === 'green',
-              'text-yellow-600':
-                quote.ai_profitability_suggestions?.ai_suggestions
-                  .profitability_health_indicator === 'amber',
-              'text-red-600':
-                quote.ai_profitability_suggestions?.ai_suggestions
-                  .profitability_health_indicator === 'red',
-            }"
-          >
-            {{
-              quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator ===
-              'red'
-                ? 'Poor'
-                : quote.ai_profitability_suggestions?.ai_suggestions
-                      .profitability_health_indicator === 'amber'
-                  ? 'Needs Review'
-                  : quote.ai_profitability_suggestions?.ai_suggestions
-                        .profitability_health_indicator === 'green'
-                    ? 'Good'
-                    : quote.ai_profitability_suggestions?.ai_suggestions
-                        .profitability_health_indicator
-            }}
+          <strong>Profitability Health:</strong>
+          <span :class="healthStatus.colorClass" class="font-semibold ml-1">
+            {{ healthStatus.label }}
           </span>
         </p>
       </div>
 
-      <div class="mt-6">
-        <h3 class="text-lg font-semibold mb-2">Line Items</h3>
-        <table class="w-full text-sm border">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="border p-2">Name</th>
-              <th class="border p-2">Qty</th>
-              <th class="border p-2">Cost</th>
-              <th class="border p-2">Sell</th>
-              <th class="border p-2">Margin %</th>
-              <th class="border p-2">Status</th>
-              <th class="border p-2">Suggestion</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="item in quote.ai_profitability_suggestions?.line_items"
-              :key="item.id"
-              class="hover:bg-gray-50"
-            >
-              <td class="border p-2">{{ item.name }}</td>
-              <td class="border p-2 text-center">{{ item.quantity }}</td>
-              <td class="border p-2 text-right">{{ formatCurrency(item.cost_price) }}</td>
-              <td class="border p-2 text-right">{{ formatCurrency(item.sell_price) }}</td>
-              <td class="border p-2 text-right">{{ item.margin_percent }}%</td>
-              <td class="border p-2">
-                <span
-                  :class="
-                    item.status === 'Low Margin'
-                      ? 'text-red-600 font-semibold'
-                      : 'text-green-600 font-semibold'
-                  "
-                >
-                  {{ item.status }}
-                </span>
-              </td>
-              <td class="border p-2 text-xs">{{ item.suggestion ?? '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <template v-if="analysis">
 
-      <div class="mt-6">
-        <h3 class="text-lg font-semibold mb-2">Labor Summary</h3>
-        <p><strong>Estimated Hours:</strong> {{ quote.labor_hours }}</p>
-        <p><strong>Hourly Rate:</strong> {{ formatCurrency(quote.labor_cost_per_hour) }}</p>
-        <p>
-          <strong>Labor Cost:</strong>
-          {{ formatCurrency(quote.ai_profitability_suggestions?.labor_cost ?? 0.0) }}
-        </p>
-        <p>
-          <strong>Estimated Sustainable Hours:</strong>
-          {{ quote.ai_profitability_suggestions?.labor_suggestions.estimated_sustainable_hours }}
-        </p>
-        <p class="text-sm text-gray-700 mt-1 italic">
-          {{ quote.ai_profitability_suggestions?.labor_suggestions.comment }}
-        </p>
-      </div>
-
-      <div class="mt-6">
-        <h3 class="text-lg font-semibold mb-2">AI Suggestions</h3>
-        <div class="space-y-2 text-sm text-gray-800">
-          <p>
-            <strong>Target Margin Adjustments:</strong>
-            {{
-              quote.ai_profitability_suggestions?.ai_suggestions.target_margin_adjustments ?? 'N/A'
-            }}
-          </p>
-          <p>
-            <strong>Labor Allocation Improvements:</strong>
-            {{
-              quote.ai_profitability_suggestions?.ai_suggestions.labor_allocation_improvements ??
-              'N/A'
-            }}
-          </p>
-          <p>
-            <strong>Product Swaps:</strong>
-            {{ quote.ai_profitability_suggestions?.ai_suggestions.product_swaps ?? 'N/A' }}
-          </p>
-          <p>
-            <strong>Profitability Summary:</strong>
-            {{ quote.ai_profitability_suggestions?.ai_suggestions.profitability_summary ?? 'N/A' }}
-          </p>
+        <!-- Line Items -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2">Line Items</h3>
+          <table class="w-full text-sm border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border p-2">Name</th>
+                <th class="border p-2">Qty</th>
+                <th class="border p-2">Cost</th>
+                <th class="border p-2">Sell</th>
+                <th class="border p-2">Margin %</th>
+                <th class="border p-2">Status</th>
+                <th class="border p-2">Suggestion</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in analysis.line_items"
+                :key="item.id"
+                class="hover:bg-gray-50"
+              >
+                <td class="border p-2">{{ item.name }}</td>
+                <td class="border p-2 text-center">{{ item.quantity }}</td>
+                <td class="border p-2 text-right">{{ formatCurrency(item.cost_price) }}</td>
+                <td class="border p-2 text-right">{{ formatCurrency(item.sell_price) }}</td>
+                <td class="border p-2 text-right">{{ item.margin_percent }}%</td>
+                <td class="border p-2">
+                  <span
+                    :class="
+                      item.status === 'Low Margin'
+                        ? 'text-red-600 font-semibold'
+                        : 'text-green-600 font-semibold'
+                    "
+                  >
+                    {{ item.status }}
+                  </span>
+                </td>
+                <td class="border p-2">
+                  <textarea
+                    v-model="item.suggestion"
+                    rows="3"
+                    class="w-full border border-gray-300 rounded p-1 text-xs"
+                    placeholder="Enter suggestion..."
+                  ></textarea>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+
+        <!-- Labor Summary -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2">Labor Summary</h3>
+          <p><strong>Estimated Hours:</strong> {{ quote.labor_hours }}</p>
+          <p><strong>Hourly Rate:</strong> {{ formatCurrency(quote.labor_cost_per_hour) }}</p>
+          <p>
+            <strong>Labor Cost:</strong>
+            {{ formatCurrency(analysis.labor_cost) }}
+          </p>
+          <p>
+            <strong>Estimated Sustainable Hours:</strong>
+            {{ analysis.labor_suggestions?.estimated_sustainable_hours ?? 'N/A' }}
+          </p>
+          <div v-if="analysis.labor_suggestions" class="mt-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Labor Comment</label>
+            <textarea
+              v-model="analysis.labor_suggestions.comment"
+              rows="3"
+              class="w-full border border-gray-300 rounded p-2 text-sm"
+              placeholder="Enter comment..."
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- AI Suggestions -->
+        <div v-if="analysis.ai_suggestions">
+          <h3 class="text-lg font-semibold mb-2">AI Suggestions</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Target Margin Adjustments
+              </label>
+              <textarea
+                v-model="analysis.ai_suggestions.target_margin_adjustments"
+                rows="3"
+                class="w-full border border-gray-300 rounded p-2 text-sm"
+                placeholder="Enter adjustments..."
+              ></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Labor Allocation Improvements
+              </label>
+              <textarea
+                v-model="analysis.ai_suggestions.labor_allocation_improvements"
+                rows="3"
+                class="w-full border border-gray-300 rounded p-2 text-sm"
+                placeholder="Enter improvements..."
+              ></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Product Swaps</label>
+              <textarea
+                v-model="analysis.ai_suggestions.product_swaps"
+                rows="3"
+                class="w-full border border-gray-300 rounded p-2 text-sm"
+                placeholder="Enter product swaps..."
+              ></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Profitability Summary
+              </label>
+              <textarea
+                v-model="analysis.ai_suggestions.profitability_summary"
+                rows="3"
+                class="w-full border border-gray-300 rounded p-2 text-sm"
+                placeholder="Enter profitability summary..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+      </template>
+
+      <!-- Actions -->
+      <div class="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          :disabled="actionLoading"
+          class="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 flex items-center gap-2 transition-colors"
+          :class="{ 'opacity-50 cursor-not-allowed': actionLoading }"
+          @click="reAnalyze"
+        >
+          <span v-if="actionLoading" class="loader"></span>
+          Reassess
+        </button>
+        <button
+          type="button"
+          :disabled="actionLoading"
+          class="bg-slate-700 text-white px-4 py-2 rounded shadow hover:bg-slate-800 flex items-center gap-2 transition-colors"
+          :class="{ 'opacity-50 cursor-not-allowed': actionLoading }"
+          @click="exportPdf"
+        >
+          <span v-if="actionLoading" class="loader"></span>
+          Export PDF
+        </button>
       </div>
+
     </div>
   </section>
 </template>
+
+<style scoped>
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.loader {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+</style>

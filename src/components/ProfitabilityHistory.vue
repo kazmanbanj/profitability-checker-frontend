@@ -1,87 +1,59 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import api from '@/api'
+import { onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useToast } from '@/composables/useToast'
+import { useFormatters } from '@/composables/useFormatters'
+import { useQuoteHistoryStore } from '@/stores/useQuoteHistoryStore'
 
-type ProfitabilitySuggestions = {
-  profit_margin: number
-  total_revenue: number
-  total_cost: number
-  ai_suggestions: {
-    profitability_health_indicator: 'green' | 'amber' | 'red' | string
-  }
-}
+const historyStore = useQuoteHistoryStore()
+const { error: toastError } = useToast()
+const { formatDate, formatCurrency, resolveHealth } = useFormatters()
 
-type Quote = {
-  id: number
-  created_at: string
-  target_profit_margin: number
-  ai_profitability_suggestions: ProfitabilitySuggestions
-}
+const {
+  quotes,
+  currentPage,
+  totalPages,
+  pageSize,
+  listLoading,
+  listFailed,
+} = storeToRefs(historyStore)
 
-const quotes = ref<Quote[]>([])
-const loading = ref(true)
-const error = ref(false)
-
-const currentPage = ref(1)
-const totalPages = ref(1)
-const pageSize = ref(10)
-
-const paginatedQuotes = computed(() => quotes.value)
-
-const goToPage = (page: number) => {
-  if (page >= 1 && page <= totalPages.value) {
-    fetchQuotes(page)
-  }
-}
-
-const fetchQuotes = async (page = 1) => {
-  loading.value = true
-  error.value = false
+async function fetchQuotes(page = 1) {
   try {
-    const res = await api.get('v1/quotes', { params: { page, limit: pageSize.value } })
-    quotes.value = res.data.data?.data || []
-    totalPages.value = res.data.data?.last_page || 1
-    currentPage.value = res.data.data?.current_page || 1
+    await historyStore.fetchQuotes(page)
   } catch {
-    error.value = true
-  } finally {
-    loading.value = false
+    toastError('Failed to load quotes. You can retry below.')
   }
 }
 
-onMounted(() => {
-  fetchQuotes()
-})
-
-const formatDate = (dateStr: string): string => {
-  return new Date(dateStr)?.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+function goToPage(page: number) {
+  historyStore.goToPage(page)
 }
 
-const formatCurrency = (value: number | string): string => {
-  const num = typeof value === 'string' ? parseFloat(value) : value
-  return `$${num?.toFixed(2)}`
+function onPageSizeChange() {
+  historyStore.setPageSize(pageSize.value)
 }
 
-const healthClass = (indicator: string) => {
-  return {
-    'bg-green-100 text-green-700': indicator === 'green',
-    'bg-yellow-100 text-yellow-700': indicator === 'amber',
-    'bg-red-100 text-red-700': indicator === 'red',
-    'bg-gray-100 text-gray-700': !['green', 'amber', 'red'].includes(indicator),
-  }
-}
+onMounted(() => fetchQuotes())
 </script>
 
 <template>
   <section class="max-w-6xl mx-auto p-6">
     <h2 class="text-2xl font-bold mb-6">Quote History</h2>
 
-    <div v-if="loading" class="text-gray-600">Loading quotes...</div>
-    <div v-else-if="error" class="text-red-500">Failed to load quotes.</div>
+    <div v-if="listLoading" class="text-gray-600">Loading quotes...</div>
+    <div
+      v-else-if="listFailed"
+      class="flex flex-col items-center gap-3 py-10 text-gray-600"
+    >
+      <p class="text-sm">Could not load quotes. Check your connection and try again.</p>
+      <button
+        class="px-4 py-2 rounded bg-slate-700 text-white hover:bg-slate-800 text-sm transition-colors"
+        @click="fetchQuotes(currentPage)"
+      >
+        Retry
+      </button>
+    </div>
     <div v-else-if="quotes.length === 0" class="text-gray-500 text-center py-8">
       No quote history found.
     </div>
@@ -100,7 +72,7 @@ const healthClass = (indicator: string) => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="quote in paginatedQuotes" :key="quote.id" class="hover:bg-gray-50">
+          <tr v-for="quote in quotes" :key="quote.id" class="hover:bg-gray-50">
             <td class="p-2 border font-semibold">#{{ quote.id }}</td>
             <td class="p-2 border">{{ formatDate(quote.created_at) }}</td>
             <td class="p-2 border text-right">{{ quote.target_profit_margin }}%</td>
@@ -108,39 +80,22 @@ const healthClass = (indicator: string) => {
               {{ quote.ai_profitability_suggestions?.profit_margin ?? 'N/A' }}%
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0.0) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_revenue ?? 0) }}
             </td>
             <td class="p-2 border text-right">
-              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0.0) }}
+              {{ formatCurrency(quote.ai_profitability_suggestions?.total_cost ?? 0) }}
             </td>
             <td class="p-2 border text-center">
               <span
                 class="text-sm font-semibold px-3 py-1 rounded-full"
-                :class="
-                  healthClass(
-                    quote.ai_profitability_suggestions?.ai_suggestions
-                      .profitability_health_indicator,
-                  )
-                "
+                :class="resolveHealth(quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator).badgeClass"
               >
-                {{
-                  quote.ai_profitability_suggestions?.ai_suggestions
-                    .profitability_health_indicator === 'red'
-                    ? 'Poor'
-                    : quote.ai_profitability_suggestions?.ai_suggestions
-                          .profitability_health_indicator === 'amber'
-                      ? 'Needs Review'
-                      : quote.ai_profitability_suggestions?.ai_suggestions
-                            .profitability_health_indicator === 'green'
-                        ? 'Good'
-                        : (quote.ai_profitability_suggestions?.ai_suggestions
-                            .profitability_health_indicator ?? 'N/A')
-                }}
+                {{ resolveHealth(quote.ai_profitability_suggestions?.ai_suggestions.profitability_health_indicator).label }}
               </span>
             </td>
             <td class="p-2 border text-center">
               <RouterLink
-                class="inline-block px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition"
+                class="inline-block px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                 :to="{ name: 'history-details', params: { id: quote.id } }"
               >
                 View More
@@ -149,13 +104,14 @@ const healthClass = (indicator: string) => {
           </tr>
         </tbody>
       </table>
+
       <div class="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
         <div class="flex items-center">
           <label for="page-size" class="mr-2 font-medium">Page size:</label>
           <select
             id="page-size"
             v-model="pageSize"
-            @change="fetchQuotes(currentPage)"
+            @change="onPageSizeChange"
             class="border rounded px-2 py-1"
           >
             <option v-for="size in [5, 10, 15, 20, 50]" :key="size" :value="size">
@@ -165,15 +121,15 @@ const healthClass = (indicator: string) => {
         </div>
         <div class="flex items-center">
           <button
-            class="px-3 py-1 rounded border mr-2"
+            class="px-3 py-1 rounded border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             :disabled="currentPage === 1"
             @click="goToPage(currentPage - 1)"
           >
             Prev
           </button>
-          <span> Page {{ currentPage }} of {{ totalPages }} </span>
+          <span>Page {{ currentPage }} of {{ totalPages }}</span>
           <button
-            class="px-3 py-1 rounded border ml-2"
+            class="px-3 py-1 rounded border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             :disabled="currentPage === totalPages || totalPages === 0"
             @click="goToPage(currentPage + 1)"
           >
