@@ -99,7 +99,7 @@ async function exportPdf() {
     >
       <p class="text-sm">Could not load quote details. Check your connection and try again.</p>
       <button
-        class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+        class="px-4 py-2 rounded bg-slate-700 text-white hover:bg-slate-800 text-sm transition-colors"
         @click="loadQuote"
       >
         Retry
@@ -253,7 +253,7 @@ async function exportPdf() {
         <button
           type="button"
           :disabled="actionLoading"
-          class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center gap-2"
+          class="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 flex items-center gap-2 transition-colors"
           :class="{ 'opacity-50 cursor-not-allowed': actionLoading }"
           @click="reAnalyze"
         >
@@ -263,7 +263,7 @@ async function exportPdf() {
         <button
           type="button"
           :disabled="actionLoading"
-          class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center gap-2"
+          class="bg-slate-700 text-white px-4 py-2 rounded shadow hover:bg-slate-800 flex items-center gap-2 transition-colors"
           :class="{ 'opacity-50 cursor-not-allowed': actionLoading }"
           @click="exportPdf"
         >

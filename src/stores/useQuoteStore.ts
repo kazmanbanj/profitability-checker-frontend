@@ -11,6 +11,7 @@ import type {
   AiProfitabilitySuggestions,
   ReAnalyzeQuoteRequest,
 } from '@/services/quoteService'
+import { useOfflineQueue } from '@/composables/useOfflineQueue'
 
 /**
  * Stores the result of the most recent profitability analysis.
@@ -23,6 +24,10 @@ export const useQuoteStore = defineStore('quote', () => {
   // -------------------------------------------------------------------------
   const result = ref<AnalyzeQuoteResponse | null>(null)
   const loading = ref(false)
+  /** Set to true when the last analyze() call was queued offline instead of sent */
+  const queued = ref(false)
+
+  const { enqueue } = useOfflineQueue()
 
   // -------------------------------------------------------------------------
   // Derived
@@ -40,7 +45,14 @@ export const useQuoteStore = defineStore('quote', () => {
   // -------------------------------------------------------------------------
   async function analyze(payload: AnalyzeQuoteRequest): Promise<void> {
     loading.value = true
+    queued.value = false
     try {
+      if (!navigator.onLine) {
+        // Device is offline — persist to queue and surface it to the caller
+        enqueue(payload)
+        queued.value = true
+        return
+      }
       result.value = await analyzeQuote(payload)
     } finally {
       loading.value = false
@@ -79,7 +91,8 @@ export const useQuoteStore = defineStore('quote', () => {
 
   function clear(): void {
     result.value = null
+    queued.value = false
   }
 
-  return { result, loading, analysis, quoteId, currency, analyze, reAnalyze, exportPdf, clear }
+  return { result, loading, queued, analysis, quoteId, currency, analyze, reAnalyze, exportPdf, clear }
 })

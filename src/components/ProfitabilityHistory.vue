@@ -48,7 +48,7 @@ onMounted(() => fetchQuotes())
     >
       <p class="text-sm">Could not load quotes. Check your connection and try again.</p>
       <button
-        class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+        class="px-4 py-2 rounded bg-slate-700 text-white hover:bg-slate-800 text-sm transition-colors"
         @click="fetchQuotes(currentPage)"
       >
         Retry
@@ -95,7 +95,7 @@ onMounted(() => fetchQuotes())
             </td>
             <td class="p-2 border text-center">
               <RouterLink
-                class="inline-block px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition"
+                class="inline-block px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                 :to="{ name: 'history-details', params: { id: quote.id } }"
               >
                 View More
@@ -121,7 +121,7 @@ onMounted(() => fetchQuotes())
         </div>
         <div class="flex items-center">
           <button
-            class="px-3 py-1 rounded border mr-2"
+            class="px-3 py-1 rounded border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             :disabled="currentPage === 1"
             @click="goToPage(currentPage - 1)"
           >
@@ -129,7 +129,7 @@ onMounted(() => fetchQuotes())
           </button>
           <span>Page {{ currentPage }} of {{ totalPages }}</span>
           <button
-            class="px-3 py-1 rounded border ml-2"
+            class="px-3 py-1 rounded border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             :disabled="currentPage === totalPages || totalPages === 0"
             @click="goToPage(currentPage + 1)"
           >

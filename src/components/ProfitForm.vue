@@ -124,6 +124,13 @@ async function submitForm() {
 
   try {
     await quoteStore.analyze(form)
+
+    if (quoteStore.queued) {
+      // Offline — submission queued, give feedback without clearing the form
+      toastSuccess('You\'re offline. Your submission has been saved and will sync automatically when you reconnect.', 7000)
+      return
+    }
+
     // Invalidate history cache so the list re-fetches on next visit
     historyStore.invalidateList()
     toastSuccess('Profitability analysis complete.')
@@ -233,7 +240,7 @@ async function exportResult() {
           />
         </div>
         <div class="text-right">
-          <button type="button" @click="removeItem(index)" class="text-red-500 hover:text-red-700">
+          <button type="button" @click="removeItem(index)" class="text-red-500 hover:text-red-700 transition-colors">
             🗑️ Remove Item
           </button>
         </div>
@@ -255,7 +262,7 @@ async function exportResult() {
         <div class="text-left">
           <button
             type="button"
-            class="text-red-500 hover:text-red-700"
+            class="text-red-500 hover:text-red-700 transition-colors"
             @click="removeAdditionalField(item, String(key))"
           >
             Remove
@@ -267,7 +274,7 @@ async function exportResult() {
         <button
           type="button"
           @click="addAdditionalField(item)"
-          class="text-blue-600 hover:text-blue-800"
+          class="text-emerald-700 hover:text-emerald-900 transition-colors"
         >
           ➕ Add Additional Info
         </button>
@@ -275,7 +282,7 @@ async function exportResult() {
     </div>
 
     <div class="text-right">
-      <button type="button" @click="addItem" class="text-green-600 hover:text-green-800">
+      <button type="button" @click="addItem" class="text-emerald-700 hover:text-emerald-900 transition-colors">
         ➕ Add Item
       </button>
     </div>
@@ -337,7 +344,7 @@ async function exportResult() {
       <button
         type="submit"
         :disabled="loading"
-        class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 mt-4 flex items-center justify-center"
+        class="bg-indigo-600 text-white px-6 py-2 rounded shadow hover:bg-indigo-700 mt-4 flex items-center justify-center transition-colors"
         :class="{ 'opacity-50 cursor-not-allowed': loading }"
       >
         <span v-if="loading" class="loader mr-2"></span>
@@ -346,7 +353,7 @@ async function exportResult() {
       <button
         type="button"
         :disabled="loading"
-        class="bg-gray-100 text-gray-700 border border-gray-300 px-6 py-2 rounded shadow hover:bg-gray-200 mt-4"
+        class="bg-slate-100 text-slate-700 border border-slate-300 px-6 py-2 rounded shadow hover:bg-slate-200 mt-4 transition-colors"
         :class="{ 'opacity-50 cursor-not-allowed': loading }"
         @click="resetForm"
       >
@@ -633,7 +640,7 @@ async function exportResult() {
           <button
             type="submit"
             :disabled="loading"
-            class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center"
+            class="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 flex items-center transition-colors"
             :class="{ 'opacity-50 cursor-not-allowed': loading }"
           >
             <span v-if="loading" class="loader mr-2"></span>
@@ -642,7 +649,7 @@ async function exportResult() {
           <button
             type="button"
             :disabled="loading"
-            class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 flex items-center ml-2"
+            class="bg-slate-700 text-white px-4 py-2 rounded shadow hover:bg-slate-800 flex items-center ml-2 transition-colors"
             @click="exportResult"
             :class="{ 'opacity-50 cursor-not-allowed': loading }"
           >
