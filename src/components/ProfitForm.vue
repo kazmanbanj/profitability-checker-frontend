@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { reactive, ref, computed, nextTick } from 'vue'
-import api from '@/api'
+import { useToast } from '@/composables/useToast'
+import { useFormatters } from '@/composables/useFormatters'
+import { useApiError } from '@/composables/useApiError'
+import {
+  analyzeQuote,
+  reAnalyzeQuote,
+  exportQuoteAnalysis,
+} from '@/services/quoteService'
+import type { AnalyzeQuoteResponse } from '@/services/quoteService'
 
 interface AdditionalInfo {
   [key: string]: string
@@ -22,13 +30,6 @@ interface Form {
   target_profit_margin: number
 }
 
-interface Result {
-  success: boolean
-  data: object
-  message: string
-  error: string[]
-}
-
 const form = reactive<Form>({
   line_items: [
     {
@@ -48,34 +49,20 @@ const form = reactive<Form>({
   target_profit_margin: 30,
 })
 
-const result = ref<Result | null>(null)
+const result = ref<AnalyzeQuoteResponse | null>(null)
 const loading = ref(false)
+const error = ref<string | null>(null)
+const { success: toastSuccess, error: toastError } = useToast()
+const { formatNumber, formatCurrency, resolveHealth } = useFormatters()
+const { extractErrorMessage } = useApiError()
 
-const analysis = computed(() => {
-  return (result.value?.data as Record<string, any>)?.ai_profitability_suggestions ?? {}
-})
+const analysis = computed<import('@/services/quoteService').AiProfitabilitySuggestions | null>(
+  () => result.value?.data?.ai_profitability_suggestions ?? null,
+)
 
 const currency = computed(() => analysis.value?.currency_symbol ?? '')
 
-const healthStatus = computed(() => {
-  const indicator = analysis.value?.ai_suggestions?.profitability_health_indicator
-  if (!indicator) return null
-  if (indicator === 'red') {
-    return { label: 'Poor', class: 'text-danger font-bold', style: 'color: #dc2626;' }
-  }
-  if (indicator === 'yellow') {
-    return { label: 'Needs Review', class: 'text-warning font-bold', style: 'color: #f59e42;' }
-  }
-  if (indicator === 'green') {
-    return { label: 'Good', class: 'text-success font-bold', style: 'color: #16a34a;' }
-  }
-  return { label: indicator, class: '', style: '' }
-})
-
-function formatNumber(value: number): string {
-  if (typeof value !== 'number' || isNaN(value)) return '0.00'
-  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+const healthStatus = computed(() => resolveHealth(analysis.value?.ai_suggestions?.profitability_health_indicator))
 
 function addItem() {
   form.line_items.push({
@@ -91,6 +78,13 @@ function addItem() {
 }
 
 function removeItem(index: number) {
+  if (form.line_items.length === 1) {
+    error.value = 'At least one line item is required.'
+    return
+  }
+  const item = form.line_items[index]
+  const label = item.name.trim() ? `"${item.name}"` : `item ${index + 1}`
+  if (!confirm(`Remove ${label}?`)) return
   form.line_items.splice(index, 1)
 }
 
@@ -105,17 +99,56 @@ function removeAdditionalField(item: Item, key: string) {
   delete item.additional_info[key]
 }
 
+function resetForm() {
+  if (result.value && !confirm('Start a new quote? Your current results will be cleared.')) return
+  Object.assign(form, {
+    line_items: [
+      {
+        name: '',
+        cost_price: 0,
+        sell_price: 0,
+        quantity: 1,
+        additional_info: { MPN: '', SKU: '' },
+      },
+    ],
+    labor_hours: 0,
+    labor_cost_per_hour: 0,
+    fixed_overheads: 0,
+    target_profit_margin: 30,
+  })
+  result.value = null
+  error.value = null
+}
+
 const quoteSummary = ref<HTMLElement | null>(null)
 
 async function submitForm() {
+  error.value = null
+
+  if (form.line_items.length === 0) {
+    error.value = 'Add at least one line item before checking profitability.'
+    return
+  }
+
+  const invalidItem = form.line_items.find(
+    (item) => item.cost_price <= 0 || item.sell_price <= 0 || item.quantity < 1,
+  )
+  if (invalidItem) {
+    const label = invalidItem.name.trim() ? `"${invalidItem.name}"` : 'one of your items'
+    error.value = `Cost price, sell price, and quantity must all be greater than zero (check ${label}).`
+    return
+  }
+
   loading.value = true
   try {
-    const { data } = await api.post('v1/quotes/analyze', form)
-    result.value = data
+    result.value = await analyzeQuote(form)
+    toastSuccess('Profitability analysis complete.')
     await nextTick()
     if (quoteSummary.value) {
       quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   } finally {
     loading.value = false
   }
@@ -123,22 +156,21 @@ async function submitForm() {
 
 async function resubmitForm() {
   loading.value = true
-  const quoteId = (result.value?.data as { id?: string | number })?.id
+  error.value = null
+  const quoteId = result.value?.data?.id
   if (!quoteId) {
-    alert('Quote ID not found in result.')
+    toastError('Quote ID not found in result.')
     loading.value = false
     return
   }
   try {
-    const aiSuggestions = (result.value?.data as any)?.ai_profitability_suggestions
-    const resubmit_form = {
+    const aiSuggestions = result.value?.data?.ai_profitability_suggestions
+    result.value = await reAnalyzeQuote(quoteId, {
       quote_id: quoteId,
-      line_items: aiSuggestions?.line_items?.map(
-        (li: { id: string | number; suggestion: string }) => ({
-          id: li.id,
-          suggestion: li.suggestion,
-        }),
-      ),
+      line_items: aiSuggestions?.line_items?.map((li) => ({
+        id: li.id,
+        suggestion: li.suggestion,
+      })),
       labor_suggestions: aiSuggestions?.labor_suggestions
         ? { comment: aiSuggestions.labor_suggestions.comment }
         : undefined,
@@ -151,13 +183,14 @@ async function resubmitForm() {
             profitability_summary: aiSuggestions.ai_suggestions.profitability_summary,
           }
         : undefined,
-    }
-    const { data } = await api.post(`v1/quotes/${quoteId}/re-analyze`, resubmit_form)
-    result.value = data
+    })
+    toastSuccess('Re-analysis complete.')
     await nextTick()
     if (quoteSummary.value) {
       quoteSummary.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   } finally {
     loading.value = false
   }
@@ -165,18 +198,14 @@ async function resubmitForm() {
 
 async function exportResult() {
   if (!result.value) return
-  const quoteId = (result.value?.data as { id?: string | number })?.id
+  const quoteId = result.value?.data?.id
   if (!quoteId) {
-    alert('Quote ID not found in result.')
+    toastError('Quote ID not found in result.')
     return
   }
   loading.value = true
   try {
-    const response = await api.get(`v1/quotes/${quoteId}/export-analysis`, {
-      responseType: 'blob',
-      params: { format: 'pdf' },
-    })
-    const blob = new Blob([response.data], { type: 'application/pdf' })
+    const blob = await exportQuoteAnalysis(quoteId)
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -185,6 +214,9 @@ async function exportResult() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    toastSuccess('PDF exported successfully.')
+  } catch (err) {
+    toastError(extractErrorMessage(err))
   } finally {
     loading.value = false
   }
@@ -216,6 +248,8 @@ async function exportResult() {
           <input
             v-model.number="item.cost_price"
             type="number"
+            min="0.01"
+            step="0.01"
             class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -225,6 +259,8 @@ async function exportResult() {
           <input
             v-model.number="item.sell_price"
             type="number"
+            min="0.01"
+            step="0.01"
             class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -234,6 +270,8 @@ async function exportResult() {
           <input
             v-model.number="item.quantity"
             type="number"
+            min="1"
+            step="1"
             class="border border-gray-300 p-2 rounded w-full focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -322,7 +360,24 @@ async function exportResult() {
       </div>
     </div>
     <br />
-    <div class="flex justify-center">
+    <div
+      v-if="error"
+      role="alert"
+      class="flex items-start gap-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"
+    >
+      <span class="mt-0.5 shrink-0" aria-hidden="true">⚠️</span>
+      <span>{{ error }}</span>
+      <button
+        type="button"
+        class="ml-auto shrink-0 text-red-400 hover:text-red-600"
+        aria-label="Dismiss error"
+        @click="error = null"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div class="flex justify-center gap-3">
       <button
         type="submit"
         :disabled="loading"
@@ -331,6 +386,15 @@ async function exportResult() {
       >
         <span v-if="loading" class="loader mr-2"></span>
         {{ loading ? 'Checking...' : 'Check Profitability' }}
+      </button>
+      <button
+        type="button"
+        :disabled="loading"
+        class="bg-gray-100 text-gray-700 border border-gray-300 px-6 py-2 rounded shadow hover:bg-gray-200 mt-4"
+        :class="{ 'opacity-50 cursor-not-allowed': loading }"
+        @click="resetForm"
+      >
+        Clear Form
       </button>
     </div>
 
@@ -364,7 +428,7 @@ async function exportResult() {
           </thead>
           <tbody>
             <tr
-              v-for="(li, idx) in (result.data as any)?.ai_profitability_suggestions?.line_items"
+              v-for="(li, idx) in result.data?.ai_profitability_suggestions?.line_items"
               :key="idx"
             >
               <td>{{ li.name }}</td>
@@ -507,7 +571,7 @@ async function exportResult() {
               <th>Profitability Health Status</th>
               <td></td>
               <td>
-                <span v-if="healthStatus" :class="healthStatus.class" :style="healthStatus.style">{{
+                <span v-if="healthStatus" :class="healthStatus.colorClass" class="font-bold">{{
                   healthStatus.label
                 }}</span>
                 <span v-else>N/A</span>

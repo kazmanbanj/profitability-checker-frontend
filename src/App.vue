@@ -8,11 +8,13 @@
         </transition>
       </router-view>
     </main>
+    <ToastContainer />
   </div>
 </template>
 
 <script setup lang="ts">
 import AppHeader from '@/components/AppHeader.vue'
+import ToastContainer from '@/components/ToastContainer.vue'
 </script>
 
 <style scoped>

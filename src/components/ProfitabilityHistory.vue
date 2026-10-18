@@ -1,30 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import api from '@/api'
+import { useToast } from '@/composables/useToast'
+import { useFormatters } from '@/composables/useFormatters'
+import { listQuotes } from '@/services/quoteService'
+import type { QuoteListItem } from '@/services/quoteService'
 
-type ProfitabilitySuggestions = {
-  profit_margin: number
-  total_revenue: number
-  total_cost: number
-  ai_suggestions: {
-    profitability_health_indicator: 'green' | 'amber' | 'red' | string
-  }
-}
-
-type Quote = {
-  id: number
-  created_at: string
-  target_profit_margin: number
-  ai_profitability_suggestions: ProfitabilitySuggestions
-}
-
-const quotes = ref<Quote[]>([])
+const quotes = ref<QuoteListItem[]>([])
 const loading = ref(true)
-const error = ref(false)
+const fetchFailed = ref(false)
 
 const currentPage = ref(1)
 const totalPages = ref(1)
 const pageSize = ref(10)
+
+const { error: toastError } = useToast()
+const { formatDate, formatCurrency, resolveHealth } = useFormatters()
 
 const paginatedQuotes = computed(() => quotes.value)
 
@@ -36,14 +26,15 @@ const goToPage = (page: number) => {
 
 const fetchQuotes = async (page = 1) => {
   loading.value = true
-  error.value = false
+  fetchFailed.value = false
   try {
-    const res = await api.get('v1/quotes', { params: { page, limit: pageSize.value } })
-    quotes.value = res.data.data?.data || []
-    totalPages.value = res.data.data?.last_page || 1
-    currentPage.value = res.data.data?.current_page || 1
+    const res = await listQuotes(page, pageSize.value)
+    quotes.value = res.data?.data || []
+    totalPages.value = res.data?.last_page || 1
+    currentPage.value = res.data?.current_page || 1
   } catch {
-    error.value = true
+    fetchFailed.value = true
+    toastError('Failed to load quotes. You can retry below.')
   } finally {
     loading.value = false
   }
@@ -53,27 +44,7 @@ onMounted(() => {
   fetchQuotes()
 })
 
-const formatDate = (dateStr: string): string => {
-  return new Date(dateStr)?.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
 
-const formatCurrency = (value: number | string): string => {
-  const num = typeof value === 'string' ? parseFloat(value) : value
-  return `$${num?.toFixed(2)}`
-}
-
-const healthClass = (indicator: string) => {
-  return {
-    'bg-green-100 text-green-700': indicator === 'green',
-    'bg-yellow-100 text-yellow-700': indicator === 'amber',
-    'bg-red-100 text-red-700': indicator === 'red',
-    'bg-gray-100 text-gray-700': !['green', 'amber', 'red'].includes(indicator),
-  }
-}
 </script>
 
 <template>
@@ -81,7 +52,18 @@ const healthClass = (indicator: string) => {
     <h2 class="text-2xl font-bold mb-6">Quote History</h2>
 
     <div v-if="loading" class="text-gray-600">Loading quotes...</div>
-    <div v-else-if="error" class="text-red-500">Failed to load quotes.</div>
+    <div
+      v-else-if="fetchFailed"
+      class="flex flex-col items-center gap-3 py-10 text-gray-600"
+    >
+      <p class="text-sm">Could not load quotes. Check your connection and try again.</p>
+      <button
+        class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+        @click="fetchQuotes(currentPage)"
+      >
+        Retry
+      </button>
+    </div>
     <div v-else-if="quotes.length === 0" class="text-gray-500 text-center py-8">
       No quote history found.
     </div>
@@ -117,24 +99,17 @@ const healthClass = (indicator: string) => {
               <span
                 class="text-sm font-semibold px-3 py-1 rounded-full"
                 :class="
-                  healthClass(
+                  resolveHealth(
                     quote.ai_profitability_suggestions?.ai_suggestions
                       .profitability_health_indicator,
-                  )
+                  ).badgeClass
                 "
               >
                 {{
-                  quote.ai_profitability_suggestions?.ai_suggestions
-                    .profitability_health_indicator === 'red'
-                    ? 'Poor'
-                    : quote.ai_profitability_suggestions?.ai_suggestions
-                          .profitability_health_indicator === 'amber'
-                      ? 'Needs Review'
-                      : quote.ai_profitability_suggestions?.ai_suggestions
-                            .profitability_health_indicator === 'green'
-                        ? 'Good'
-                        : (quote.ai_profitability_suggestions?.ai_suggestions
-                            .profitability_health_indicator ?? 'N/A')
+                  resolveHealth(
+                    quote.ai_profitability_suggestions?.ai_suggestions
+                      .profitability_health_indicator,
+                  ).label
                 }}
               </span>
             </td>
